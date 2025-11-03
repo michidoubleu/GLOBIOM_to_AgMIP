@@ -12,11 +12,13 @@
 ## a pull request or email me via wogerer@iiasa.ac.at
 
 
+### from main directory call: 
+### Rscript codes/main_GLOBIOM_to_AgMIP.R path/to/my_file.gdx path/to/output_dir
+
+
 
 rm(list=ls())
 
 source("codes/user_settings.R")
 
 source("codes/prep_GLOBIOM_agmip_accelerator.R")
-
-

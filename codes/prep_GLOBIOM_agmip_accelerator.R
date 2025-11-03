@@ -19,8 +19,20 @@ output_ag <- tryCatch(
   readGDX(gdx_file, symbols = "OUTPUT_AG"),
   error = function(e) stop("Failed to read OUTPUT_AG: ", e$message)
 )
+
 output_ag <- output_ag$OUTPUT_AG$records
 setDT(output_ag)
+
+new_names <- c("ALLRUN", "VAR_ID", "VAR_UNIT", "ANYREGION", "ITEM_AG",
+               "ALLSCEN1","ALLSCEN2","ALLSCEN3","Year","Value")
+
+# Detect if first 9 columns are unlabeled uni_*
+if (all(grepl("^uni_", names(output_ag)[1:9]))) {
+  setnames(output_ag, old = names(output_ag), new = new_names)
+} else {
+  message("Column names already labeled — skipped renaming.")
+}
+
 
 # -------------------------
 # Standardize columns dynamically
@@ -34,8 +46,7 @@ for (old in names(rename_map)) {
   if (old %in% names(output_ag)) setnames(output_ag, old, rename_map[[old]])
 }
 
-# Ensure ALLRUN exists for scenario construction
-if (!"ALLRUN" %in% names(output_ag)) output_ag[, ALLRUN := ""]
+output_ag[, ALLRUN := NULL][]
 
 # Convert factor columns to character
 fact_cols <- names(which(sapply(output_ag, is.factor)))
@@ -76,14 +87,14 @@ dm_vars <- names(varid_dm_map)
 other_vars <- c("POPT","GDPT","Area","ARRF","ARIR","YILD","YIRF","YIIR","YEXO",
                 "Feed","OTHU","IMPO","EXPO","WATR","CALO","CALI","Prod","CONS",
                 "NETT","EMIS","ECH4","EN2O","CTAX","NBAL","FRTIN","FRTON","FRTIP",
-                "FRTOP","PBAL","LYLD","LYXO","YEXO_I","YEXO_R","XPRP","XPRX")
+                "FRTOP","PBAL","LYLD","LYXO","YEXO_I","YEXO_R","XPRP","XPRX", "ABII")
 emis_vars <- c("CH4","N2O")
 
 # -------------------------
 # Helper: dynamic column selector
 # -------------------------
 common_cols <- intersect(
-  c("ALLRUN", "VAR_ID", "VAR_UNIT", "ANYREGION", "ITEM_AG",
+  c("VAR_ID", "VAR_UNIT", "ANYREGION", "ITEM_AG",
     "ALLSCEN1","ALLSCEN2","ALLSCEN3","Year","Value"),
   names(output_ag)
 )
@@ -134,7 +145,7 @@ Output_Ag_Land_noncrop[, ITEM_AG := land_noncrop_recode[ITEM_AG]]
 crop_items <- c("1.1.AnnualCrp","1.2.1.PlantationFoodCrp","1.3.OthCrpLnd")
 Output_Ag_Land_CRP <- output_ag[VAR_ID=="LAND2" & ITEM_AG %in% crop_items, ..common_cols]
 Output_Ag_Land_CRP[, `:=`(VAR_ID="LAND", ITEM_AG="CRP")]
-Output_Ag_Land_CRP <- Output_Ag_Land_CRP[, .(Value=sum(Value)), by=.(ALLRUN, VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
+Output_Ag_Land_CRP <- Output_Ag_Land_CRP[, .(Value=sum(Value)), by=.(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
 
 Output_Ag_Land <- rbindlist(list(Output_Ag_Land_noncrop, Output_Ag_Land_CRP), use.names=TRUE, fill=TRUE)
 
@@ -143,18 +154,18 @@ Output_Ag_Land <- rbindlist(list(Output_Ag_Land_noncrop, Output_Ag_Land_CRP), us
 # -------------------------
 Output_Ag_FOOD <- output_ag[VAR_ID %in% c("food","WAST") & VAR_UNIT=="1000 t", ..common_cols]
 Output_Ag_FOOD[, VAR_ID := "FOOD"]
-Output_Ag_FOOD <- Output_Ag_FOOD[, .(Value=sum(Value)), by=.(ALLRUN, VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
+Output_Ag_FOOD <- Output_Ag_FOOD[, .(Value=sum(Value)), by=.(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
 
 Output_Ag_FRTN <- output_ag[VAR_ID %in% c("FRTIN","FRTON") & VAR_UNIT=="1000 t", ..common_cols]
 if (nrow(Output_Ag_FRTN) > 0) {
   Output_Ag_FRTN[, VAR_ID := "FRTN"]
-  Output_Ag_FRTN <- Output_Ag_FRTN[, .(Value=sum(Value)), by=.(ALLRUN, VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
+  Output_Ag_FRTN <- Output_Ag_FRTN[, .(Value=sum(Value)), by=.(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
 }
 
 Output_Ag_FRTP <- output_ag[VAR_ID %in% c("FRTIP","FRTOP") & VAR_UNIT=="1000 t", ..common_cols]
 if (nrow(Output_Ag_FRTP) > 0) {
   Output_Ag_FRTP[, VAR_ID := "FRTP"]
-  Output_Ag_FRTP <- Output_Ag_FRTP[, .(Value=sum(Value)), by=.(ALLRUN, VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
+  Output_Ag_FRTP <- Output_Ag_FRTP[, .(Value=sum(Value)), by=.(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
 }
 
 # -------------------------
@@ -167,8 +178,7 @@ OUTPUT_AG_t <- rbindlist(list(
 ), use.names=TRUE, fill=TRUE)
 
 # Construct scenario string
-OUTPUT_AG_t[, Scen := paste(ALLSCEN1, ALLSCEN2, ALLSCEN3, ALLRUN, sep="-")]
-OUTPUT_AG_t[, ALLRUN := NULL]
+OUTPUT_AG_t[, Scen := paste(ALLSCEN1, ALLSCEN2, ALLSCEN3, sep="-")]
 
 # Final column ordering
 OUTPUT_AG_ACCELERATOR <- OUTPUT_AG_t[, .(
