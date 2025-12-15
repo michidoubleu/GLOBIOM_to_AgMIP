@@ -48,10 +48,7 @@ for (old in names(rename_map)) {
 
 output_ag[, ALLRUN := NULL][]
 
-if(length(scen.filter)!=0){
-#filter scenarios
-output_ag <- output_ag[ALLSCEN2 %in% scen.filter]
-}
+
 
 # Convert factor columns to character
 fact_cols <- names(which(sapply(output_ag, is.factor)))
@@ -205,6 +202,13 @@ exclude_items <- c("Meat","ALL","CER","SRP","PULP","MEAL","BIOM","LUC","LUCF","L
                    "LUCG","LUCE","LUCS","SOC","SOCE","SOCC","SOCG","SOCB","PEAT", "IP_Biomass", "EW_Biomass")
 exclude_regions <- c("ROW","CHE")
 exclude_variables <- c()
+
+
+if(length(scen.filter)!=0){
+  OUTPUT_AG_ACCELERATOR <- OUTPUT_AG_ACCELERATOR[Scenario %in% scen.filter]
+}
+
+
 
 date.tag <- Sys.Date()
 

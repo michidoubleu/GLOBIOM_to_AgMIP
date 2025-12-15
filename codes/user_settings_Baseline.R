@@ -2,7 +2,7 @@
 ##############################################################################################################################
 ##############################################################################################################################
 
-GLOBIOM.file <- "inputs/output_4390_merged.gdx" # set location of the accelerator merge file!!!
+GLOBIOM.file <- "" # set location of the accelerator merge file!!!
 # -------------------------
 # Configuration / args
 # -------------------------
@@ -13,7 +13,8 @@ dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 if (length(args) >= 3) {
   scen.filter <- args[3:length(args)]
 } else {
-  scen.filter <- c()
+  scen.filter <- c() #### SCEN1-SCEN2-SCEN3... example c("SSP2-GHGAGCO2_100-baseline","SSP2-GHGAGCO2_200-baseline")
+
 }
 
 rename.model <- "GLOBIOM"
