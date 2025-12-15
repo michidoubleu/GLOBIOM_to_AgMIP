@@ -201,7 +201,7 @@ OUTPUT_AG_ACCELERATOR <- OUTPUT_AG_t[, .(
 # Export per scenario
 # -------------------------
 years_keep <- seq(2000L, 2100L, by=10L)
-exclude_items <- c("Meat","ALL","CER","SRP","PULP","MEAL","BIOM","LUC","LUCF","LUCC",
+exclude_items <- c("Meat","ALL","CER","SRP","PULP","MEAL","BIOM","LUC","LUCF","LUCC","LUCR","LUCR2",
                    "LUCG","LUCE","LUCS","SOC","SOCE","SOCC","SOCG","SOCB","PEAT", "IP_Biomass", "EW_Biomass")
 exclude_regions <- c("ROW","CHE")
 exclude_variables <- c()
