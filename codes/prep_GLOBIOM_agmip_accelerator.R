@@ -16,7 +16,7 @@ suppressWarnings({
 # Read GDX
 # -------------------------
 output_ag <- tryCatch(
-  readGDX(gdx_file, symbols = "OUTPUT_AG"),
+  readGDX(GLOBIOM.file, symbols = "OUTPUT_AG"),
   error = function(e) stop("Failed to read OUTPUT_AG: ", e$message)
 )
 
@@ -47,6 +47,11 @@ for (old in names(rename_map)) {
 }
 
 output_ag[, ALLRUN := NULL][]
+
+if(length(scen.filter)!=0){
+#filter scenarios
+output_ag <- output_ag[ALLSCEN2 %in% scen.filter]
+}
 
 # Convert factor columns to character
 fact_cols <- names(which(sapply(output_ag, is.factor)))
@@ -197,8 +202,9 @@ OUTPUT_AG_ACCELERATOR <- OUTPUT_AG_t[, .(
 # -------------------------
 years_keep <- seq(2000L, 2100L, by=10L)
 exclude_items <- c("Meat","ALL","CER","SRP","PULP","MEAL","BIOM","LUC","LUCF","LUCC",
-                   "LUCG","LUCE","LUCS","SOC","SOCE","SOCC","SOCG","SOCB","PEAT")
+                   "LUCG","LUCE","LUCS","SOC","SOCE","SOCC","SOCG","SOCB","PEAT", "IP_Biomass", "EW_Biomass")
 exclude_regions <- c("ROW","CHE")
+exclude_variables <- c()
 
 date.tag <- Sys.Date()
 
@@ -206,8 +212,15 @@ setkey(OUTPUT_AG_ACCELERATOR, Scenario)
 scenarios <- unique(OUTPUT_AG_ACCELERATOR$Scenario)
 message("Writing ", length(scenarios), " scenario file(s) to ", out_dir)
 
-dt_sub <- OUTPUT_AG_ACCELERATOR[Year %in% years_keep & !(Item %in% exclude_items) & !(Region %in% exclude_regions)]
-fname <- file.path(out_dir, paste0(date.tag,"_GLOBIOM_AgMIP_accelerator.csv"))
+dt_sub <- OUTPUT_AG_ACCELERATOR[Year %in% years_keep & !(Item %in% exclude_items) & !(Region %in% exclude_regions) & !(Variable %in% exclude_variables)]
+
+fname <- file.path(out_dir, paste0(date.tag,"_",accelerator.name,"_AgMIP_accelerator.csv"))
+
+if(!is.null(rename.model)){
+  dt_sub$Model <- rename.model
+}
+
+
 data.table::fwrite(dt_sub, fname)
 
 message("Done. Exported files are in: ", out_dir)
