@@ -21,7 +21,8 @@ rm(list=ls())
 
 # source("codes/user_settings.R")
 # source("codes/user_settings_SOC_scen.R")
-source("codes/user_settings_Baseline.R")
+# source("codes/user_settings_Baseline.R")
+source("codes/user_settings_comprehensive.R")
 
 source("codes/prep_GLOBIOM_agmip_accelerator.R")
 
