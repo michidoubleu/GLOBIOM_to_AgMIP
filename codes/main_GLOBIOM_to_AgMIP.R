@@ -24,5 +24,5 @@ rm(list=ls())
 # source("codes/user_settings_Baseline.R")
 source("codes/user_settings_comprehensive.R")
 
-source("codes/prep_GLOBIOM_agmip_accelerator.R")
+source("codes/prep_GLOBIOM_agmip_accelerator_comprehensive.R")
 
