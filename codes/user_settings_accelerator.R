@@ -9,10 +9,9 @@ args <- commandArgs(trailingOnly = TRUE)
 GLOBIOM.file <- ifelse(length(args) >= 1, args[1], "inputs/acc_pointer.gdx")
 
 # Default output dir if no ARG2 provided
-out_dir <- ifelse(length(args) >= 2, args[2], "./")
-if(out_dir!="./"){
+out_dir <- ifelse(length(args) >= 2, args[2], "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
-}
+
   
 # Scenario Filtering (ARG3+)
 if (length(args) >= 3) {
