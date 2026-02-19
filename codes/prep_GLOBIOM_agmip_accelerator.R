@@ -30,7 +30,7 @@ if ("ALLRUN" %in% names(output_ag)) output_ag[, ALLRUN := NULL]
 fact_cols <- names(which(sapply(output_ag, is.factor)))
 output_ag[, (fact_cols) := lapply(.SD, as.character), .SDcols = fact_cols]
 char_cols <- names(which(sapply(output_ag, is.character)))
-output_ag[, (char_cols) := lapply(.SD, str_trim), .SDcols = char_cols]
+output_ag[, (char_cols) := lapply(.SD, trimws), .SDcols = char_cols]
 
 # Standardize Columns
 if ("ANYREGION" %in% names(output_ag)) output_ag[, ANYREGION := fifelse(ANYREGION == "World", "WLD", ANYREGION)]
