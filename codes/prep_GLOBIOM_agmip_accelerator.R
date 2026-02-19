@@ -3,7 +3,6 @@
 # ==============================================================================
 
 suppressWarnings({
-  library(tidyverse)
   library(data.table)
   library(gamstransfer)
 })
