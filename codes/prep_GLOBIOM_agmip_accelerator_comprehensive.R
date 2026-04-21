@@ -150,7 +150,21 @@ Output_Ag_Land_CRP[, `:=`(VAR_ID="LAND", ITEM_AG="CRP")]
 Output_Ag_Land_CRP <- Output_Ag_Land_CRP[, .(Value=sum(Value)), by=.(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
 
 Output_Ag_Land <- rbindlist(list(Output_Ag_Land_noncrop, Output_Ag_Land_CRP), use.names=TRUE, fill=TRUE)
+# Create AGR = CRP + GRS
+Output_Ag_Land_AGR <- Output_Ag_Land[
+  ITEM_AG %in% c("CRP", "GRS"),
+  .(Value = sum(Value)),
+  by = .(VAR_ID, VAR_UNIT, ANYREGION, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)
+]
 
+Output_Ag_Land_AGR[, ITEM_AG := "AGR"]
+
+# Append to main table
+Output_Ag_Land <- rbindlist(
+  list(Output_Ag_Land, Output_Ag_Land_AGR),
+  use.names = TRUE,
+  fill = TRUE
+)
 # -------------------------
 # Section F: FOOD and Fertiliser
 # -------------------------
@@ -162,12 +176,16 @@ Output_Ag_FRTN <- output_ag[VAR_ID %in% c("FRTIN","FRTON") & VAR_UNIT=="1000 t",
 if (nrow(Output_Ag_FRTN) > 0) {
   Output_Ag_FRTN[, VAR_ID := "FRTN"]
   Output_Ag_FRTN <- Output_Ag_FRTN[, .(Value=sum(Value)), by=.(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
+} else {
+  Output_Ag_FRTN <- output_ag[VAR_ID %in% c("FRTN") & VAR_UNIT=="1000 t", ..common_cols]
 }
 
 Output_Ag_FRTP <- output_ag[VAR_ID %in% c("FRTIP","FRTOP") & VAR_UNIT=="1000 t", ..common_cols]
 if (nrow(Output_Ag_FRTP) > 0) {
   Output_Ag_FRTP[, VAR_ID := "FRTP"]
   Output_Ag_FRTP <- Output_Ag_FRTP[, .(Value=sum(Value)), by=.(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
+} else {
+  Output_Ag_FRTP <- output_ag[VAR_ID %in% c("FRTP") & VAR_UNIT=="1000 t", ..common_cols]
 }
 
 # -------------------------
@@ -218,13 +236,61 @@ message("Writing ", length(scenarios), " scenario file(s) to ", out_dir)
 
 dt_sub <- OUTPUT_AG_ACCELERATOR[Year %in% years_keep & !(Item %in% exclude_items) & !(Region %in% exclude_regions) & !(Variable %in% exclude_variables)]
 
+
+
+
+#### add forest emissions
+for.res <- readRDS("./open_input/processed_forest_emis.rds")
+dt_forest_2000 <- for.res %>% filter(Year==2010) %>% mutate(Year=2000)
+for.res <- bind_rows(for.res, dt_forest_2000) %>% filter(Year<=2050)
+
+dt_main <- as.data.table(dt_sub)
+dt_forest <- as.data.table(for.res)
+dt_combined <- rbindlist(list(dt_main, dt_forest), use.names = TRUE, fill = TRUE)
+dt_updated <- dt_combined[, .(Value = sum(Value, na.rm = TRUE)), 
+                          by = .(Model, Scenario, Region, Item, Variable, Year, Unit)]
+
+#### add forest other
+for.res.other <- readRDS("./open_input/processed_forest_other.rds")
+for.res.other <- for.res.other %>% filter(Year<=2050)
+
+dt_for.res.other <- as.data.table(for.res.other)
+dt_updated <- rbindlist(list(dt_updated, dt_for.res.other), use.names = TRUE, fill = TRUE)
+
+#### add BII
+BII_update <- readRDS("./open_input/processed_BII.rds")
+
+dt_BII_update <- as.data.table(BII_update)
+dt_updated <- rbindlist(list(dt_updated, dt_BII_update), use.names = TRUE, fill = TRUE)
+
+#### add Economic Variables
+
+
+
+
+
+
+
+
+
+
+####HOTFIXES FOR STAKEHOLDER WORKSHOP
+# Replace specific scenarios
+dt_updated[Scenario == "Base_FPWET", Scenario := "Base_FPPTL"]
+dt_updated[Scenario == "Base_EAWET", Scenario := "Base_EAPTL"]
+
+dt_updated[Region == "World", Region := "WLD"]
+dt_updated <- dt_updated[Region != "ROW"]
+dt_updated <- dt_updated[Region != "CHE"]
+
+
+
 fname <- file.path(out_dir, paste0(date.tag,"_",accelerator.name,"_comprehensive.csv"))
 
 if(!is.null(rename.model)){
   dt_sub$Model <- rename.model
 }
 
-
-data.table::fwrite(dt_sub, fname)
+data.table::fwrite(dt_updated, fname)
 
 message("Done. Exported files are in: ", out_dir)
