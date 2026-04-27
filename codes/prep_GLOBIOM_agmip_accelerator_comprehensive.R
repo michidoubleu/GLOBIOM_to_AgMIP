@@ -289,7 +289,7 @@ dt_updated <- dt_combined[, .(Value = sum(Value, na.rm = TRUE)),
 
 
 #### add forest other
-for.res.other <- readRDS("./open_input/processed_forest_other.rds")
+for.res.other <- readRDS("./open_input/processed_forest.rds")
 
 for.res.other <- for.res.other %>% filter(Year <= 2050)
 
