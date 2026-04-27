@@ -296,6 +296,13 @@ for.res.other <- for.res.other %>% filter(Year <= 2050)
 dt_for.res.other <- as.data.table(for.res.other)
 dt_updated <- rbindlist(list(dt_updated, dt_for.res.other), use.names = TRUE, fill = TRUE)
 
+#### add mitigation technologies
+source("./codes/mitigtech_calc.R")
+mitigtech_update <- readRDS("./open_input/processed_mitigtech.rds")
+
+dt_mitigtech_update <- as.data.table(mitigtech_update)
+dt_updated <- rbindlist(list(dt_updated, dt_mitigtech_update), use.names = TRUE, fill = TRUE)
+
 #### add BII
 source("./codes/BII_calc.R")
 BII_update <- readRDS("./open_input/processed_BII.rds")
