@@ -49,7 +49,7 @@ region.map <- unique(
                  region_61 = uni_3)]
 )
 
-country.map <- readGDX("inputs/a6_ref_2402.gdx", symbols = "REGION61_COUNTRY_MAP")
+country.map <- readGDX("inputs/a6_LAMASUS_baseline.gdx", symbols = "REGION61_COUNTRY_MAP")
 country.map <- country.map$REGION61_COUNTRY_MAP$records
 setDT(country.map)
 country.map <- unique(

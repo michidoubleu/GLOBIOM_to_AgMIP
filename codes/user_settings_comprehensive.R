@@ -2,7 +2,7 @@
 ##############################################################################################################################
 ##############################################################################################################################
 
-GLOBIOM.file <- "inputs/comprehensive_full.gdx" # set location of the accelerator merge file!!!
+GLOBIOM.file <- "inputs/output_149_merged.gdx" # set location of the accelerator merge file!!!
 # -------------------------
 # Configuration / args
 # -------------------------
