@@ -241,6 +241,29 @@ regional_report <- crop_region %>%
 
 
 
+# Map to new regions and aggregate
+regional_report <- regional_report %>%
+  # 1. Join the mapping data using left_join
+  left_join(
+    mapping %>% 
+      rename(ANYREGION = region_61) %>% 
+      select(-region_c) %>% 
+      filter(region != "World"),
+    by = "ANYREGION",
+    relationship = "many-to-many" # Replaces allow.cartesian = TRUE
+  ) %>%
+  # 2. Drop any original regions that didn't get mapped to a new region
+  filter(!is.na(region)) %>%
+  # 3. Group by the NEW region, Year, and Scenario
+  group_by(region, Year, ALLSCEN3) %>%
+  # 4. Sum all the numeric economic columns for the new regional grouping
+  summarise(
+    across(where(is.numeric), ~ sum(.x, na.rm = TRUE)),
+    .groups = "drop"
+  ) %>%
+  # 5. Rename the new 'region' column back to 'ANYREGION' 
+  # This ensures your downstream Econ_tidy script doesn't break!
+  rename(ANYREGION = region)
 
 Econ_tidy <- regional_report %>%
   # 1. Rename columns to match the "Item_Variable" pattern for easy pivoting
