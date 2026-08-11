@@ -238,8 +238,10 @@ OUTPUT_AG_ACCELERATOR <- OUTPUT_AG_t[, .(
 years_keep <- seq(2000L, 2100L, by = 10L)
 exclude_items <- c(
   "Meat", "ALL", "CER", "SRP", "PULP", "MEAL", "BIOM", "LUC", "LUCF", "LUCC", "LUCR", "LUCR2",
-  "LUCG", "LUCE", "LUCS", "SOC", "SOCE", "SOCC", "SOCG", "SOCB", "PEAT", "IP_Biomass", "EW_Biomass"
+  "LUCG", "LUCE", "LUCS", "PEAT", "IP_Biomass", "EW_Biomass"
 )
+# SOC/SOCE/SOCC/SOCG/SOCB (soil carbon flux, total/cropland-Tier1/cropland/
+# grassland/biochar) are kept -- reported under Variable=EMIS below.
 exclude_regions <- c("ROW", "CHE")
 exclude_variables <- c()
 
@@ -256,6 +258,10 @@ scenarios <- unique(OUTPUT_AG_ACCELERATOR$Scenario)
 message("Writing ", length(scenarios), " scenario file(s) to ", out_dir)
 
 dt_sub <- OUTPUT_AG_ACCELERATOR[Year %in% years_keep & !(Item %in% exclude_items) & !(Region %in% exclude_regions) & !(Variable %in% exclude_variables)]
+
+# EMIS and ECO2 are identical for the soil-carbon items (pure CO2 flux, no
+# CH4/N2O) -- keep only EMIS to avoid reporting the same flux twice.
+dt_sub <- dt_sub[!(Item %in% c("SOC", "SOCE", "SOCC", "SOCG", "SOCB") & Variable == "ECO2")]
 
 
 
