@@ -211,31 +211,54 @@ ls_region <- full_ls %>%
          ls_inc  = A.econ.inc)
 
 # 3. Extract Total Subsidies ("TOT" item in BUDG)
-tot_sub_data <- output_econ %>% 
-  filter(ITEM_AG == "TOT", VAR_ID == "BUDG", VAR_UNIT == "Mn USD 2000") %>% 
+tot_sub_data <- output_econ %>%
+  filter(ITEM_AG == "TOT", VAR_ID == "BUDG", VAR_UNIT == "Mn USD 2000") %>%
   group_by(ANYREGION, Year, ALLSCEN3) %>%
   summarise(tot_sub = sum(Value, na.rm = TRUE), .groups = "drop")
+
+# 3b. Extract CAP Pillar 1 (direct payments) / Pillar 2 (rural development)
+# subsidies from the payment-scheme ITEM_AG codes under BUDG. These codes are
+# not commodity-linked, so unlike tot_sub above there is no crop/livestock
+# split available for them -- see codes/CAP_BUDG_pillar_mapping.md for the
+# full code -> pillar mapping and the reasoning/confidence behind it.
+pillar1_codes <- c("dp_bps", "DPSAPS", "DPBPS_SAPS", "DPAGG_biss", "DPGREEN", "DPYOUNG",
+                    "DPAGG_cisyf", "dpVcs", "DPAGG_cispr", "DPAGG_cotto", "DPCSCS", "DP68",
+                    "DPAGG_criss", "DPFIRHA", "DPREG", "DPAGG_ecos", "DPNAT", "DPFRMF", "DPFRMS")
+pillar2_codes <- c("DPRD_LFA", "DPRD_N2K", "DPRD_SeExte", "DPAE", "DPAGG_envc",
+                    "DPAGG_ANC7", "DPNATCO")
+
+pillar1_sub_data <- output_econ %>%
+  filter(ITEM_AG %in% pillar1_codes, VAR_ID == "BUDG", VAR_UNIT == "Mn USD 2000") %>%
+  group_by(ANYREGION, Year, ALLSCEN3) %>%
+  summarise(pillar1_sub = sum(Value, na.rm = TRUE), .groups = "drop")
+
+pillar2_sub_data <- output_econ %>%
+  filter(ITEM_AG %in% pillar2_codes, VAR_ID == "BUDG", VAR_UNIT == "Mn USD 2000") %>%
+  group_by(ANYREGION, Year, ALLSCEN3) %>%
+  summarise(pillar2_sub = sum(Value, na.rm = TRUE), .groups = "drop")
 
 # 4. Combine and Calculate Final Reporting Variables
 regional_report <- crop_region %>%
   full_join(ls_region, by = c("ANYREGION", "Year", "ALLSCEN3")) %>%
   full_join(tot_sub_data, by = c("ANYREGION", "Year", "ALLSCEN3")) %>%
+  full_join(pillar1_sub_data, by = c("ANYREGION", "Year", "ALLSCEN3")) %>%
+  full_join(pillar2_sub_data, by = c("ANYREGION", "Year", "ALLSCEN3")) %>%
   mutate(
     # Replace NAs with 0 so math doesn't fail if a region lacks crops or livestock
     across(where(is.numeric), ~replace_na(.x, 0)),
-    
+
     # Calculate Other Subsidies (Total BUDG minus specific Crop and Livestock subsidies)
     other_sub = tot_sub - crop_sub - ls_sub,
     other_sub = ifelse(other_sub<0,0,other_sub),
-    
+
     # Calculate Total Income
     tot_inc = crop_inc + ls_inc + other_sub
   ) %>%
   # Organize columns for a clean final report
-  select(ANYREGION, Year, ALLSCEN3, 
+  select(ANYREGION, Year, ALLSCEN3,
          crop_inc, crop_rev, crop_cost, crop_sub,
          ls_inc, ls_rev, ls_cost, ls_sub,
-         tot_inc, tot_sub, other_sub)
+         tot_inc, tot_sub, other_sub, pillar1_sub, pillar2_sub)
 
 ##### Combined Regional Reporting - END #####
 
@@ -294,6 +317,28 @@ Econ_tidy <- regional_report %>%
   ) %>%
   # 4. Reorder columns to exactly match your requested layout
   select(Model, Scenario, Region, Item, Variable, Year, Unit, Value)
+
+# CAP Pillar 1 / Pillar 2 payments -- reported at "Total" item level only
+# (built separately from the pivot above because "BUDG_1stP"/"BUDG_2ndP"
+# contain a second underscore that pivot_longer's names_sep would mis-split)
+budg_pillar_tidy <- regional_report %>%
+  select(Region = ANYREGION, Scenario = ALLSCEN3, Year, pillar1_sub, pillar2_sub) %>%
+  pivot_longer(
+    cols = c(pillar1_sub, pillar2_sub),
+    names_to = "Variable",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Model    = "GLOBIOM",
+    Item     = "TOT",
+    Variable = ifelse(Variable == "pillar1_sub", "BUDG_1stP", "BUDG_2ndP"),
+    Unit     = "bn USD 2005 MER",
+    Year     = as.integer(as.character(Year)),
+    Value    = Value / 1000 # Converting from Millions to Billions
+  ) %>%
+  select(Model, Scenario, Region, Item, Variable, Year, Unit, Value)
+
+Econ_tidy <- bind_rows(Econ_tidy, budg_pillar_tidy)
 
 # Optional: order by Region and Year
 setorder(Econ_tidy, Region, Year)

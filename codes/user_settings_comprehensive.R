@@ -2,7 +2,7 @@
 ##############################################################################################################################
 ##############################################################################################################################
 
-GLOBIOM.file <- "inputs/output_149_merged.gdx" # set location of the accelerator merge file!!!
+GLOBIOM.file <- "inputs/merged_LAMA.gdx" # set location of the accelerator merge file!!!
 # -------------------------
 # Configuration / args
 # -------------------------

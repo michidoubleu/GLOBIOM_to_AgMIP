@@ -287,7 +287,35 @@ grassland_final <- grassland_updated[, .(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, A
 output_land <- output_land[ITEM_AG != "Grassland"]
 output_land <- rbind(output_land, grassland_final)
 
-for_mng = dt_updated %>% 
+##### Intensive / Extensive management area (AgMIP template: AREA_intensive, AREA_extensive) #####
+# Cropland_HI/Cropland_LI and Grassland_intensive/Grassland_extensive are already
+# net of the organic and hedgerow deductions above, so they sum cleanly with
+# AREA_org/AREA_lft (processed_mitigtech.rds) without double-counting area.
+area_mgmt <- output_land[
+  ITEM_AG %in% c("Cropland_HI", "Cropland_LI", "Grassland_intensive", "Grassland_extensive")
+][, ITEM_AG := fifelse(ITEM_AG %in% c("Cropland_HI", "Grassland_intensive"),
+                        "AREA_intensive", "AREA_extensive")]
+
+area_mgmt <- area_mgmt[, .(Value = sum(Value, na.rm = TRUE)),
+                        by = .(VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN3, Year)]
+
+area_mgmt_tidy <- area_mgmt[, .(
+  Model    = "GLOBIOM",
+  Scenario = ALLSCEN3,
+  Region   = ANYREGION,
+  Item     = "TOT",
+  Variable = ITEM_AG,
+  Year     = as.integer(Year),
+  Unit     = VAR_UNIT,
+  Value    = Value
+)]
+
+setorder(area_mgmt_tidy, Region, Year)
+area_mgmt_tidy <- as_tibble(area_mgmt_tidy)
+
+saveRDS(area_mgmt_tidy, "./open_input/processed_area_mgmt.rds")
+
+for_mng = dt_updated %>%
   filter(Variable == "AREA", 
          Item %in% c("FOR|PRO", "FOR|LOC", "FOR|LON", "FOR|MIC",
                      "FOR|MIN","FOR|HIC","FOR|HIN","FOR|LRC","FOR|LRN",

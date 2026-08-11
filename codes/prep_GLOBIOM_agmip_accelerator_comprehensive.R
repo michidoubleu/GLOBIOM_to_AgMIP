@@ -91,8 +91,8 @@ dm_vars <- names(varid_dm_map)
 other_vars <- c(
   "POPT", "GDPT", "Area", "ARRF", "ARIR", "YILD", "YIRF", "YIIR", "YEXO",
   "Feed", "OTHU", "IMPO", "EXPO", "WATR", "CALO", "CALI", "Prod", "CONS",
-  "NETT", "EMIS", "ECH4", "EN2O", "ECO2", "CTAX", "NBAL", "FRTIN", "FRTON", "FRTIP",
-  "FRTOP", "PBAL", "LYLD", "LYXO", "YEXO_I", "YEXO_R", "XPRP", "XPRX", "ABII"
+  "NETT", "EMIS", "ECH4", "EN2O", "ECO2", "CTAX", "NBAL", "FRTN", "FRTP",
+  "PBAL", "LYLD", "LYXO", "YEXO_I", "YEXO_R", "XPRP", "XPRX", "ABII"
 )
 emis_vars <- c("CH4", "N2O")
 
@@ -260,6 +260,31 @@ dt_sub <- OUTPUT_AG_ACCELERATOR[Year %in% years_keep & !(Item %in% exclude_items
 
 
 
+
+##### integrate missing scenarios
+full.scens <-       c("BASE", "FP", "EA", "CP", 
+                      "Base_FPFRS", "Base_EAFRS", "Base_CPFRS",
+                      "Base_FPSOC", "Base_EASOC", "Base_CPSOC",
+                      "Base_FPPTL", "Base_EAPTL", "Base_CPPTL",
+                      "Base_FPCAP", "Base_EACAP",
+                      "Base_FPPST", "Base_EAPST", "Base_CPPST",
+                      "Base_FPFRT", "Base_EAFRT", "Base_CPFRT",
+                      "Base_FPSWF", "Base_EASWF", "Base_CPSWF",
+                      "Base_FPORG", "Base_EAORG", "Base_CPORG",
+                      "Base_FPWDM", "Base_EAWDM", "Base_CPWDM",
+                      "Base_FPBSR", "Base_EABSR", "Base_CPBSR")
+
+missing.scens <- setdiff(full.scens,dt_sub$Scenario)
+
+dt_sub <- rbindlist(c(
+  list(dt_sub),
+  lapply(missing.scens, \(s)
+         copy(dt_sub[Scenario == "BASE"])[, Scenario := s]
+  )
+))
+
+
+
 #### add afforetation emissions
 source("codes/integrate_affor_emissions.R")
 dt_forest_2000 <- for.res %>%
@@ -309,6 +334,12 @@ BII_update <- readRDS("./open_input/processed_BII.rds")
 
 dt_BII_update <- as.data.table(BII_update)
 dt_updated <- rbindlist(list(dt_updated, dt_BII_update), use.names = TRUE, fill = TRUE)
+
+#### add intensive/extensive management area (byproduct of BII_calc.R)
+area_mgmt_update <- readRDS("./open_input/processed_area_mgmt.rds")
+
+dt_area_mgmt_update <- as.data.table(area_mgmt_update)
+dt_updated <- rbindlist(list(dt_updated, dt_area_mgmt_update), use.names = TRUE, fill = TRUE)
 
 #### add Economic Variables
 source("./codes/Econ_calc.R")

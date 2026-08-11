@@ -56,3 +56,4 @@ for.res <- map_dfr(items, function(i) {
   # Reorder columns to match your desired output
   select(Model, Scenario, Region, Item, Variable, Year, Unit, Value) %>%
   as_tibble()
+

@@ -1,20 +1,20 @@
-LUM,LU,Abundance,Richness,Bray-Curtis
-Primary forest,Forest,1,1,1
-Close-to-nature management,Forest,0.647544527,0.851231577,1.114012695
-Combined objective forestry,Forest,0.539066337,0.711926737,0.410569765
-Intensive forestry,Forest,0.743179119,0.761180723,0.865690195
-Very intensive forestry,Forest,0.43128214,0.665028816,0.669060298
-Agroforestry,Cropland,0.782897839,0.863934567,0.674179055
-Extensive permanent cropland,Cropland,0.789679315,0.803942717,0.674179055
-Intensive permanent cropland,Cropland,0.55664383,0.630247976,0.571001612
-Extensive cropland,Cropland,0.491047308,0.646547483,0.674179055
-Intensive cropland,Cropland,0.412216971,0.583869703,0.571001612
-Unmanaged natural grassland,Grassland,0.654325847,0.731185809,0.931531049
-Managed natural grassland,Grassland,0.650815564,0.801536551,0.316221707
-Low density pasture/grassland,Grassland,0.749826317,0.805284667,0.537763758
-Moderate density pasture/grassland,Grassland,0.726519783,0.816940197,0.554288569
-High density pasture/grassland,Grassland,0.653835853,0.746885867,0.554288569
-Low intensity urban,Urban,0.705165164,0.687353148,0.444575768
-Medium intensity urban,Urban,0.61577952,0.607930586,0.444575768
-High intensity urban,Urban,0.662074333,0.507175582,0.748467903
-Other urban,Urban,0.587727854,0.526379821,0.444575768
+LUM,LU,Abundance,Richness,Bray-Curtis,BII
+Primary forest,Forest,1,1,1,1
+Close-to-nature management,Forest,0.647544527,0.851231577,1.114012695,0.721372824
+Combined objective forestry,Forest,0.539066337,0.711926737,0.410569765,0.221324339
+Intensive forestry,Forest,0.743179119,0.761180723,0.865690195,0.643362876
+Very intensive forestry,Forest,0.43128214,0.665028816,0.669060298,0.288553757
+Agroforestry,Cropland,0.782897839,0.863934567,0.674179055,0.527813325
+Extensive permanent cropland,Cropland,0.789679315,0.803942717,0.674179055,0.532385254
+Intensive permanent cropland,Cropland,0.55664383,0.630247976,0.571001612,0.317844524
+Extensive cropland,Cropland,0.491047308,0.646547483,0.674179055,0.33105381
+Intensive cropland,Cropland,0.412216971,0.583869703,0.571001612,0.235376555
+Unmanaged natural grassland,Grassland,0.654325847,0.731185809,0.931531049,0.609524843
+Managed natural grassland,Grassland,0.650815564,0.801536551,0.316221707,0.205802009
+Low density pasture/grassland,Grassland,0.749826317,0.805284667,0.537763758,0.403229418
+Moderate density pasture/grassland,Grassland,0.726519783,0.816940197,0.554288569,0.402701611
+High density pasture/grassland,Grassland,0.653835853,0.746885867,0.554288569,0.362413739
+Low intensity urban,Urban,0.705165164,0.687353148,0.444575768,0.313499344
+Medium intensity urban,Urban,0.61577952,0.607930586,0.444575768,0.273760653
+High intensity urban,Urban,0.662074333,0.507175582,0.748467903,0.495541388
+Other urban,Urban,0.587727854,0.526379821,0.444575768,0.261289562
