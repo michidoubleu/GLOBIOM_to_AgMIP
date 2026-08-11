@@ -334,6 +334,48 @@ mitigtech_update <- readRDS("./open_input/processed_mitigtech.rds")
 dt_mitigtech_update <- as.data.table(mitigtech_update)
 dt_updated <- rbindlist(list(dt_updated, dt_mitigtech_update), use.names = TRUE, fill = TRUE)
 
+#### add crop/grassland management-intensity area split
+# CRP_extense/GRS_extense = area under CropMgmt_SOC/GrsMgmt_SOC (already
+# summarised in mitigtech_calc.R as AREA_til/AREA_aem); CRP_intense/GRS_intense
+# = the remainder of the total CRP/GRS area (Variable=LAND) not under that
+# management. Region label is harmonised ("World" -> "WLD") since mitigtech_calc.R
+# reads OUTPUT_AG_REG directly and doesn't get the WLD recode applied to output_ag above.
+soc_mgmt_area <- all_mitigtech_summary[
+  ITEM_AG %in% c("AREA_til", "AREA_aem"),
+  .(mgmt_area = sum(Value, na.rm = TRUE)),
+  by = .(ANYREGION, ALLSCEN3, ITEM_AG, Year)
+]
+soc_mgmt_area[, `:=`(
+  Region   = fifelse(ANYREGION == "World", "WLD", as.character(ANYREGION)),
+  Scenario = as.character(ALLSCEN3),
+  Year     = as.integer(as.character(Year)),
+  Item     = fifelse(ITEM_AG == "AREA_til", "CRP", "GRS")
+)]
+
+total_crp_grs <- dt_updated[
+  Variable == "LAND" & Item %in% c("CRP", "GRS"),
+  .(Model, Scenario, Region, Item, Year, Unit, total_area = Value)
+]
+
+crp_grs_intensity <- merge(
+  total_crp_grs,
+  soc_mgmt_area[, .(Region, Scenario, Item, Year, mgmt_area)],
+  by = c("Region", "Scenario", "Item", "Year"),
+  all.x = TRUE
+)
+crp_grs_intensity[is.na(mgmt_area), mgmt_area := 0]
+
+crp_grs_intensity_tidy <- rbindlist(list(
+  crp_grs_intensity[, .(Model, Scenario, Region,
+                         Item = paste0(Item, "_extense"), Variable = "AREA",
+                         Year, Unit, Value = mgmt_area)],
+  crp_grs_intensity[, .(Model, Scenario, Region,
+                         Item = paste0(Item, "_intense"), Variable = "AREA",
+                         Year, Unit, Value = pmax(0, total_area - mgmt_area))]
+))
+
+dt_updated <- rbindlist(list(dt_updated, crp_grs_intensity_tidy), use.names = TRUE, fill = TRUE)
+
 #### add BII
 source("./codes/BII_calc.R")
 BII_update <- readRDS("./open_input/processed_BII.rds")
