@@ -66,17 +66,24 @@ Output_Ag_Land <- rbindlist(list(Output_Ag_Land_noncrop, Output_Ag_Land_CRP), us
 Output_Ag_FOOD <- output_ag[VAR_ID %in% c("food","WAST") & VAR_UNIT=="1000 t", ..common_cols]
 Output_Ag_FOOD <- Output_Ag_FOOD[, .(Value=sum(Value)), by=.(VAR_ID="FOOD", VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
 
+# 5-letter codes (inorganic + organic) if both exist, otherwise the 4-letter total
 process_fert <- function(dt, ids, new_id) {
+  if (!all(ids %in% dt$VAR_ID)) {
+    message(new_id, ": ", paste(ids, collapse = "/"), " not found, using ", new_id)
+    return(dt[VAR_ID == new_id & VAR_UNIT=="1000 t", ..common_cols])
+  }
   res <- dt[VAR_ID %in% ids & VAR_UNIT=="1000 t", ..common_cols]
-  if(nrow(res) > 0) res <- res[, .(Value=sum(Value)), by=.(VAR_ID=new_id, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
-  return(res)
+  res[, .(Value=sum(Value)), by=.(VAR_ID=new_id, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
 }
 Output_Ag_FRTN <- process_fert(output_ag, c("FRTIN","FRTON"), "FRTN")
 Output_Ag_FRTP <- process_fert(output_ag, c("FRTIP","FRTOP"), "FRTP")
 
 # 4. Final Merge & Export
 OUTPUT_AG_t <- rbindlist(list(Output_AG_DM, OUTPUT_AG_Oth, OUTPUT_AG_Emis, Output_Ag_Proto, Output_Ag_Proti, Output_Ag_FOOD, Output_Ag_Land, Output_Ag_FRTP, Output_Ag_FRTN), use.names=TRUE, fill=TRUE)
-OUTPUT_AG_t[, Scen := paste(ALLSCEN1, ALLSCEN2, ALLSCEN3, sep="-")]
+if (!exists("scen.dims")) scen.dims <- c("SCEN1", "SCEN2", "SCEN3")
+if (!exists("rename.model") || is.null(rename.model)) rename.model <- "GLOBIOM"
+scen.dims.cols <- paste0("ALL", sub("^ALL", "", toupper(scen.dims)))
+OUTPUT_AG_t[, Scen := do.call(paste, c(.SD, sep="-")), .SDcols = scen.dims.cols]
 
 OUTPUT_AG_ACCELERATOR <- OUTPUT_AG_t[, .(Model=rename.model, Scenario=Scen, Region=ANYREGION, Item=ITEM_AG, Variable=VAR_ID, Year=Year, Unit=VAR_UNIT, Value=Value)]
 

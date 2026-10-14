@@ -5,16 +5,19 @@ This repository hosts the codes to transform GLOBIOM standard output to the AgMI
 ## User Guide
 
 ### 1. Configuring the Routine
-Before running the AgMIP reporting pipeline, you can customize the execution by modifying the user settings files located in the `codes/` directory:
-- **`user_settings_comprehensive.R`**: For the full pipeline (including Economic, BII, and Mitigation modules).
+All user settings are set in the settings block of the main script and used by the child scripts:
+- **`main_GLOBIOM_to_AgMIP.R`**: For the full pipeline (including Economic, BII, and Mitigation modules). Settings not set there fall back to `settings_defaults.R`.
 - **`user_settings_accelerator.R`**: Internal! Only for settings when launching as **ROUTINE** on the **IIASA-Accelerator**.
 
 **Key variables you can set:**
 - `GLOBIOM.file`: Path to your input GLOBIOM GDX file (default is in `inputs/`).
-- `out_dir`: The directory where the final standardized CSV files will be saved (default is in `output/`).
+- `out_dir`: The directory where the final standardized CSV files will be saved (default: `./outputs`).
 - `rename.model`: The label for the "Model" column in the output (default: "GLOBIOM").
-- `scen.filter`: A vector of scenario names if you want to process only a subset of scenarios (default: NULL = all scenarios in the GDX file).
-- `years_keep`: The specific years you want to include in the final report (default: NULL = all years in the GDX file).
+- `scen.dims`: Scenario dimensions composing the scenario name, joined with "-" (default: `c("SCEN3")`; e.g. `c("SCEN2", "SCEN3")` gives `SSP2-BASE`).
+- `scen.filter`: A vector of scenario names if you want to process only a subset of scenarios (default: empty = all scenarios in the GDX file).
+- `scen.rename` / `scen.fill` / `scen.fill.from`: Scenario renaming in the reporting and filling of missing scenarios as a copy of another one (LAMASUS).
+- `years_keep`, `exclude_items`, `exclude_regions`, `exclude_variables`: Filters applied to the full output of all modules. Soil carbon items (`soc_items`) are excluded as they are not yet in the AgMIP template.
+- Exogenous module inputs: `costs.file`, `country.map.file`, `predicts.file`, `affor.factors.file`, `forest.hwp.file`, `forest.other.file`, `forest.year.max`.
 
 *Note: You can also override the input file and output directory via command line arguments when running the scripts.*
 
@@ -39,7 +42,7 @@ The pipeline is typically initialized via the main execution scripts:
 - `main_GLOBIOM_to_AgMIP.R`: The comprehensive entry point that executes the full suite of modules (BII, Economics, Mitigation, Afforestation) by calling `prep_GLOBIOM_agmip_accelerator_comprehensive.R`.
 - `main_GLOBIOM_to_AgMIP_accelerator.R`: A streamlined entry point launching as **ROUTINE** on the **IIASA-Accelerator**.
 
-User configurations, such as filtering years, scenarios, and setting the root directory, are handled via settings files (e.g., `user_settings_comprehensive.R` and `user_settings_accelerator.R`).
+User configurations, such as filtering years, scenarios, and setting the root directory, are handled in the main script (`main_GLOBIOM_to_AgMIP.R`) and `user_settings_accelerator.R` respectively. The region mapping used by the Econ and BII modules is built in `region_mapping.R`.
 
 ---
 
@@ -68,8 +71,8 @@ The routine relies on several input datasets. Below is a comprehensive list of t
 * **Purpose:** The primary output database from the GLOBIOM model runs. It provides the core data variables including `OUTPUT_AG` (general agricultural outputs), `OUTPUT` (prices, production, subsidies), `ACR_COMPARE` (cropland management types), and `OUTPUT_AG_REG` (mitigation technologies).
 * **Origin:** *[User Input Required: Please specify the generation process or source of this GDX file]*
 
-**File:** `inputs/a6_LAMASUS_baseline.gdx`
-* **Loaded In:** `BII_calc.R`
+**File:** `inputs/a6_LAMASUS_baseline.gdx` (setting `country.map.file`)
+* **Loaded In:** `region_mapping.R` (used by `BII_calc.R`)
 * **Purpose:** Provides the spatial mapping crosswalk (`REGION61_COUNTRY_MAP`) to link the 61 GLOBIOM regions to country-level data.
 * **Origin:** *[User Input Required: Please specify the source]*
 

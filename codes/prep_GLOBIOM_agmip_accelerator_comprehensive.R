@@ -3,14 +3,16 @@
 # Cleaned + dynamic GDX -> Accelerator CSV exporter
 # Fully adapts to the domain columns in the GDX file
 # Hybrid tidyverse/data.table approach: data.table for speed
+# Settings come from codes/main_GLOBIOM_to_AgMIP.R (defaults: codes/settings_defaults.R)
 # -------------------------
 
 suppressWarnings({
-  library(tidyverse) # used mainly for str_trim
+  library(tidyverse) # str_trim + dplyr/tidyr used by the sourced modules
   library(data.table) # main heavy lifting
-  library(unpivotr) # keep in case used downstream
   library(gamstransfer)
 })
+
+source("codes/settings_defaults.R")
 
 # -------------------------
 # Read GDX
@@ -60,6 +62,9 @@ output_ag[, (fact_cols) := lapply(.SD, as.character), .SDcols = fact_cols]
 char_cols <- names(which(sapply(output_ag, is.character)))
 output_ag[, (char_cols) := lapply(.SD, str_trim), .SDcols = char_cols]
 
+# Scenario name from the dimensions chosen in scen.dims
+output_ag <- compose_scenario(output_ag)
+
 # Standardize region names
 if ("ANYREGION" %in% names(output_ag)) {
   output_ag[, ANYREGION := fifelse(ANYREGION == "World", "WLD", ANYREGION)]
@@ -88,10 +93,11 @@ unit_map_other <- c(
 unit_map_emis <- c("Mt CH4/yr" = "ktCH4", "Mt N2O/yr" = "ktN2O")
 
 dm_vars <- names(varid_dm_map)
+# FRTN/FRTP are built in Section F only (listing them here duplicated them)
 other_vars <- c(
   "POPT", "GDPT", "Area", "ARRF", "ARIR", "YILD", "YIRF", "YIIR", "YEXO",
   "Feed", "OTHU", "IMPO", "EXPO", "WATR", "CALO", "CALI", "Prod", "CONS",
-  "NETT", "EMIS", "ECH4", "EN2O", "ECO2", "CTAX", "NBAL", "FRTN", "FRTP",
+  "NETT", "EMIS", "ECH4", "EN2O", "ECO2", "CTAX", "NBAL",
   "PBAL", "LYLD", "LYXO", "YEXO_I", "YEXO_R", "XPRP", "XPRX", "ABII"
 )
 emis_vars <- c("CH4", "N2O")
@@ -200,21 +206,20 @@ Output_Ag_FOOD <- output_ag[VAR_ID %in% c("food", "WAST") & VAR_UNIT == "1000 t"
 Output_Ag_FOOD[, VAR_ID := "FOOD"]
 Output_Ag_FOOD <- Output_Ag_FOOD[, .(Value = sum(Value)), by = .(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
 
-Output_Ag_FRTN <- output_ag[VAR_ID %in% c("FRTIN", "FRTON") & VAR_UNIT == "1000 t", ..common_cols]
-if (nrow(Output_Ag_FRTN) > 0) {
-  Output_Ag_FRTN[, VAR_ID := "FRTN"]
-  Output_Ag_FRTN <- Output_Ag_FRTN[, .(Value = sum(Value)), by = .(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
-} else {
-  Output_Ag_FRTN <- output_ag[VAR_ID %in% c("FRTN") & VAR_UNIT == "1000 t", ..common_cols]
+# Fertiliser: inorganic + organic 5-letter codes (FRTIN+FRTON, FRTIP+FRTOP)
+# if both exist in the GDX, otherwise the 4-letter total (FRTN, FRTP)
+process_fert <- function(split_ids, total_id) {
+  if (all(split_ids %in% output_ag$VAR_ID)) {
+    res <- output_ag[VAR_ID %in% split_ids & VAR_UNIT == "1000 t", ..common_cols]
+    res[, VAR_ID := total_id]
+    res[, .(Value = sum(Value)), by = .(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
+  } else {
+    message(total_id, ": ", paste(split_ids, collapse = "/"), " not found, using ", total_id)
+    output_ag[VAR_ID == total_id & VAR_UNIT == "1000 t", ..common_cols]
+  }
 }
-
-Output_Ag_FRTP <- output_ag[VAR_ID %in% c("FRTIP", "FRTOP") & VAR_UNIT == "1000 t", ..common_cols]
-if (nrow(Output_Ag_FRTP) > 0) {
-  Output_Ag_FRTP[, VAR_ID := "FRTP"]
-  Output_Ag_FRTP <- Output_Ag_FRTP[, .(Value = sum(Value)), by = .(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
-} else {
-  Output_Ag_FRTP <- output_ag[VAR_ID %in% c("FRTP") & VAR_UNIT == "1000 t", ..common_cols]
-}
+Output_Ag_FRTN <- process_fert(c("FRTIN", "FRTON"), "FRTN")
+Output_Ag_FRTP <- process_fert(c("FRTIP", "FRTOP"), "FRTP")
 
 # -------------------------
 # Combine all tables
@@ -225,13 +230,10 @@ OUTPUT_AG_t <- rbindlist(list(
   Output_Ag_FOOD, Output_Ag_Land, Output_Ag_FRTP, Output_Ag_FRTN
 ), use.names = TRUE, fill = TRUE)
 
-# Construct scenario string
-OUTPUT_AG_t[, Scen := paste0(ALLSCEN3)]
-
 # Final column ordering
-OUTPUT_AG_ACCELERATOR <- OUTPUT_AG_t[, .(
+dt_sub <- OUTPUT_AG_t[, .(
   Model = "GLOBIOM",
-  Scenario = Scen,
+  Scenario = ALLSCEN3,
   Region = ANYREGION,
   Item = ITEM_AG,
   Variable = VAR_ID,
@@ -240,62 +242,29 @@ OUTPUT_AG_ACCELERATOR <- OUTPUT_AG_t[, .(
   Value = Value
 )]
 
-# -------------------------
-# Export per scenario
-# -------------------------
-years_keep <- seq(2000L, 2100L, by = 10L)
-exclude_items <- c(
-  "Meat", "ALL", "CER", "SRP", "PULP", "MEAL", "BIOM", "LUC", "LUCF", "LUCC", "LUCR", "LUCR2",
-  "LUCG", "LUCE", "LUCS", "PEAT", "IP_Biomass", "EW_Biomass"
-)
-# SOC/SOCE/SOCC/SOCG/SOCB (soil carbon flux, total/cropland-Tier1/cropland/
-# grassland/biochar) are kept -- reported under Variable=EMIS below.
-exclude_regions <- c("ROW", "CHE")
-exclude_variables <- c()
-
-
-if (length(scen.filter) != 0) {
-  OUTPUT_AG_ACCELERATOR <- OUTPUT_AG_ACCELERATOR[Scenario %in% scen.filter]
-}
-
-
-date.tag <- gsub("-", "", Sys.Date())
-
-setkey(OUTPUT_AG_ACCELERATOR, Scenario)
-scenarios <- unique(OUTPUT_AG_ACCELERATOR$Scenario)
-message("Writing ", length(scenarios), " scenario file(s) to ", out_dir)
-
-dt_sub <- OUTPUT_AG_ACCELERATOR[Year %in% years_keep & !(Item %in% exclude_items) & !(Region %in% exclude_regions) & !(Variable %in% exclude_variables)]
-
+# SOC reporting -- soil carbon flux items (soc_items) are currently dropped via
+# exclude_items as they are not yet in the AgMIP template. To report them,
+# remove soc_items from exclude_items in the main script and uncomment below:
 # EMIS and ECO2 are identical for the soil-carbon items (pure CO2 flux, no
-# CH4/N2O) -- keep only EMIS to avoid reporting the same flux twice.
-dt_sub <- dt_sub[!(Item %in% c("SOC", "SOCE", "SOCC", "SOCG", "SOCB") & Variable == "ECO2")]
+# CH4/N2O) -- keep only EMIS to avoid reporting the same flux twice. CTAX
+# (shadow carbon price for these items) is not reported.
+# dt_sub <- dt_sub[!(Item %in% soc_items & Variable %in% c("ECO2", "CTAX"))]
 
 
+##### scenario renaming + fill of missing scenarios (settings: scen.rename, scen.fill)
+# renaming first, so a renamed scenario is not also filled from scen.fill.from
+dt_sub <- apply_scen_rename(dt_sub)
 
-
-
-##### integrate missing scenarios
-full.scens <-       c("BASE", "FP", "EA", "CP", 
-                      "Base_FPFRS", "Base_EAFRS", "Base_CPFRS",
-                      "Base_FPSOC", "Base_EASOC", "Base_CPSOC",
-                      "Base_FPPTL", "Base_EAPTL", "Base_CPPTL",
-                      "Base_FPCAP", "Base_EACAP",
-                      "Base_FPPST", "Base_EAPST", "Base_CPPST",
-                      "Base_FPFRT", "Base_EAFRT", "Base_CPFRT",
-                      "Base_FPSWF", "Base_EASWF", "Base_CPSWF",
-                      "Base_FPORG", "Base_EAORG", "Base_CPORG",
-                      "Base_FPWDM", "Base_EAWDM", "Base_CPWDM",
-                      "Base_FPBSR", "Base_EABSR", "Base_CPBSR")
-
-missing.scens <- setdiff(full.scens,dt_sub$Scenario)
-
-dt_sub <- rbindlist(c(
-  list(dt_sub),
-  lapply(missing.scens, \(s)
-         copy(dt_sub[Scenario == "BASE"])[, Scenario := s]
-  )
-))
+missing.scens <- setdiff(scen.fill, dt_sub$Scenario)
+if (length(missing.scens) > 0) {
+  if (!(scen.fill.from %in% dt_sub$Scenario)) stop("scen.fill.from '", scen.fill.from, "' not found in the data")
+  message("Filling ", length(missing.scens), " missing scenario(s) as copy of ", scen.fill.from, ": ",
+          paste(missing.scens, collapse = ", "))
+  dt_sub <- rbindlist(c(
+    list(dt_sub),
+    lapply(missing.scens, \(s) copy(dt_sub[Scenario == scen.fill.from])[, Scenario := s])
+  ))
+}
 
 
 
@@ -304,125 +273,195 @@ source("codes/integrate_affor_emissions.R")
 dt_forest_2000 <- for.res %>%
   filter(Year == 2010) %>%
   mutate(Year = 2000, Value = 0)
-for.res <- bind_rows(for.res, dt_forest_2000) %>% filter(Year <= 2050)
+for.res <- bind_rows(for.res, dt_forest_2000) %>% filter(Year <= forest.year.max)
 
-dt_main <- as.data.table(dt_sub)
-dt_forest <- as.data.table(for.res)
+dt_main <- as_report_dt(dt_sub)
+dt_forest <- as_report_dt(for.res)
 dt_combined <- rbindlist(list(dt_main, dt_forest), use.names = TRUE, fill = TRUE)
 
 
 
 #### add HWP emissions
-for.res.emis <- readRDS("./open_input/processed_forest_HWP_emis.rds")
+for.res.emis <- readRDS(forest.hwp.file)
 dt_forest_2000 <- for.res.emis %>%
   filter(Year == 2010) %>%
   mutate(Year = 2000)
-for.res.emis <- bind_rows(for.res.emis, dt_forest_2000) %>% filter(Year <= 2050)
+for.res.emis <- bind_rows(for.res.emis, dt_forest_2000) %>% filter(Year <= forest.year.max)
 
-dt_forest <- as.data.table(for.res.emis)
+dt_forest <- as_report_dt(for.res.emis)
 dt_combined <- rbindlist(list(dt_combined, dt_forest), use.names = TRUE, fill = TRUE)
 
+# afforestation sinks come from output_ag, so still carry the original names
+dt_combined <- apply_scen_rename(dt_combined)
 dt_updated <- dt_combined[, .(Value = sum(Value, na.rm = TRUE)),
   by = .(Model, Scenario, Region, Item, Variable, Year, Unit)
 ]
 
 
 #### add forest other
-for.res.other <- readRDS("./open_input/processed_forest.rds")
+for.res.other <- readRDS(forest.other.file)
 
-for.res.other <- for.res.other %>% filter(Year <= 2050)
+for.res.other <- for.res.other %>% filter(Year <= forest.year.max)
 
-dt_for.res.other <- as.data.table(for.res.other)
+dt_for.res.other <- as_report_dt(for.res.other)
 dt_updated <- rbindlist(list(dt_updated, dt_for.res.other), use.names = TRUE, fill = TRUE)
 
 #### add mitigation technologies
 source("./codes/mitigtech_calc.R")
-mitigtech_update <- readRDS("./open_input/processed_mitigtech.rds")
 
-dt_mitigtech_update <- as.data.table(mitigtech_update)
-dt_updated <- rbindlist(list(dt_updated, dt_mitigtech_update), use.names = TRUE, fill = TRUE)
+dt_updated <- rbindlist(list(dt_updated, as_report_dt(mitigtech_tidy)), use.names = TRUE, fill = TRUE)
 
 #### add crop/grassland management-intensity area split
-# CRP|EXT/GRS|EXT = area under CropMgmt_SOC/GrsMgmt_SOC (already summarised in
-# mitigtech_calc.R as AREA_til/AREA_aem); CRP|INT/GRS|INT = the remainder of
-# the total CRP/GRS area not under that management -- CRP|EXT+CRP|INT sums
-# back to AREA/CRP, GRS|EXT+GRS|INT sums back to AREA/GRS (same Variable=AREA,
-# matching the FOR/FOR|xxx forest convention, rather than reconciling against
-# a different Variable like LAND).
+# All sourced from mitigtech_calc.R's all_mitigtech_summary (ITEM_AG):
+#   AREA_til     = CropMgmt_SOC   -> CRP|EXT
+#   AREA_biochar = Biochar_apl    -> used only for the CRP mutual-exclusivity
+#                                     check below; not exported as CRP|BCH
+#                                     (already reported under AREA_biochar/TOT)
+#   AREA_aem     = GrsMgmt_SOC    -> GRS|EXT
+#   AREA_agrofor = Silvopasture (excl. Silvopasture_IP) -> subtracted out of
+#                                     GRS|INT's remainder but not exported as
+#                                     GRS|SVP (already reported under
+#                                     AREA_agrofor/TOT)
+#
+# CRP: EXT + INT = AREA/CRP (unchanged 2-way split).
+#
+# GRS: AREA/GRS (from LAND2/"2.Grassland") covers ALL grassland, including
+# grassland not used for feeding animals at all (no input) -- see
+# codes/GRS_LSP_area_land_trace.txt. So GRS|EXT/GRS|INT are based on
+# Area/LSP ("livestock/pasture", the grassland actually used for animals),
+# duplicated here into AREA/LSP for a same-Variable reconciliation total.
+# GRS|EXT + GRS|INT does NOT sum to AREA/LSP -- the silvopasture portion is
+# subtracted out of the remainder but reported separately via AREA_agrofor.
+#
 # Region label is harmonised ("World" -> "WLD") since mitigtech_calc.R reads
 # OUTPUT_AG_REG directly and doesn't get the WLD recode applied to output_ag above.
-soc_mgmt_area <- all_mitigtech_summary[
-  ITEM_AG %in% c("AREA_til", "AREA_aem"),
-  .(mgmt_area = sum(Value, na.rm = TRUE)),
+mgmt_source <- all_mitigtech_summary[
+  ITEM_AG %in% c("AREA_til", "AREA_biochar", "AREA_aem", "AREA_agrofor"),
+  .(area = sum(Value, na.rm = TRUE)),
   by = .(ANYREGION, ALLSCEN3, ITEM_AG, Year)
 ]
-soc_mgmt_area[, `:=`(
+mgmt_source[, `:=`(
   Region   = fifelse(ANYREGION == "World", "WLD", as.character(ANYREGION)),
   Scenario = as.character(ALLSCEN3),
-  Year     = as.integer(as.character(Year)),
-  Item     = fifelse(ITEM_AG == "AREA_til", "CRP", "GRS")
+  Year     = as.integer(as.character(Year))
 )]
+mgmt_source <- apply_scen_rename(mgmt_source)
 
-total_crp_grs <- dt_updated[
-  Variable == "AREA" & Item %in% c("CRP", "GRS"),
-  .(Model, Scenario, Region, Item, Year, Unit, total_area = Value)
+crp_ext <- mgmt_source[ITEM_AG == "AREA_til",     .(Region, Scenario, Year, crp_ext = area)]
+crp_bch <- mgmt_source[ITEM_AG == "AREA_biochar", .(Region, Scenario, Year, crp_bch = area)]
+grs_ext <- mgmt_source[ITEM_AG == "AREA_aem",     .(Region, Scenario, Year, grs_ext = area)]
+grs_svp <- mgmt_source[ITEM_AG == "AREA_agrofor", .(Region, Scenario, Year, grs_svp = area)]
+
+total_lsp <- dt_updated[
+  Variable == "Area" & Item == "LSP",
+  .(Model, Scenario, Region, Year, Unit, total_area = Value)
 ]
 
-crp_grs_intensity <- merge(
-  total_crp_grs,
-  soc_mgmt_area[, .(Region, Scenario, Item, Year, mgmt_area)],
-  by = c("Region", "Scenario", "Item", "Year"),
-  all.x = TRUE
-)
-crp_grs_intensity[is.na(mgmt_area), mgmt_area := 0]
+# expose LSP under Variable=AREA too, matching the CRP/GRS/FOR convention,
+# so GRS|EXT+GRS|SVP+GRS|INT has a same-Variable total to reconcile against
+dt_updated <- rbindlist(list(
+  dt_updated,
+  total_lsp[, .(Model, Scenario, Region, Item = "LSP", Variable = "AREA", Year, Unit, Value = total_area)]
+), use.names = TRUE, fill = TRUE)
 
-crp_grs_intensity_tidy <- rbindlist(list(
-  crp_grs_intensity[, .(Model, Scenario, Region,
-                         Item = paste0(Item, "|EXT"), Variable = "AREA",
-                         Year, Unit, Value = mgmt_area)],
-  crp_grs_intensity[, .(Model, Scenario, Region,
-                         Item = paste0(Item, "|INT"), Variable = "AREA",
-                         Year, Unit, Value = pmax(0, total_area - mgmt_area))]
+## ---- CRP: EXT/INT (unchanged 2-way) + separate, non-exclusive BCH ----
+total_crp <- dt_updated[
+  Variable == "AREA" & Item == "CRP",
+  .(Model, Scenario, Region, Year, Unit, total_area = Value)
+]
+crp_joined <- merge(total_crp, crp_ext, by = c("Region", "Scenario", "Year"), all.x = TRUE)
+crp_joined <- merge(crp_joined, crp_bch, by = c("Region", "Scenario", "Year"), all.x = TRUE)
+crp_joined[is.na(crp_ext), crp_ext := 0]
+crp_joined[is.na(crp_bch), crp_bch := 0]
+
+n_neg_crp_with_bch <- sum((crp_joined$total_area - crp_joined$crp_ext - crp_joined$crp_bch) < 0)
+message(
+  "CRP intensity split: ", n_neg_crp_with_bch, " of ", nrow(crp_joined),
+  " region/scenario/year rows would go negative if BCH were also subtracted ",
+  "from AREA/CRP alongside EXT. Zero negatives does NOT prove EXT/BCH are ",
+  "non-overlapping (biochar area may just be small relative to AREA/CRP even ",
+  "if applied on the same land) -- absent a data source that can confirm ",
+  "mutual exclusivity, BCH is kept as a separate, non-subtracted item rather ",
+  "than assumed exclusive (EXT+INT still sums to AREA/CRP)."
+)
+
+# BCH is not exported as its own AREA item -- it's already reported under
+# AREA_biochar/TOT. crp_bch is only used above for the mutual-exclusivity check.
+crp_tidy <- rbindlist(list(
+  crp_joined[, .(Model, Scenario, Region, Item = "CRP|EXT", Variable = "AREA",
+                 Year, Unit, Value = crp_ext)],
+  crp_joined[, .(Model, Scenario, Region, Item = "CRP|INT", Variable = "AREA",
+                 Year, Unit, Value = pmax(0, total_area - crp_ext))]
 ))
 
-dt_updated <- rbindlist(list(dt_updated, crp_grs_intensity_tidy), use.names = TRUE, fill = TRUE)
+## ---- GRS: 3-way mutually-exclusive EXT/SVP/INT, based on AREA/LSP ----
+grs_joined <- merge(total_lsp, grs_ext, by = c("Region", "Scenario", "Year"), all.x = TRUE)
+grs_joined <- merge(grs_joined, grs_svp, by = c("Region", "Scenario", "Year"), all.x = TRUE)
+grs_joined[is.na(grs_ext), grs_ext := 0]
+grs_joined[is.na(grs_svp), grs_svp := 0]
+grs_joined[, remainder := total_area - grs_ext - grs_svp]
+
+n_neg_grs <- sum(grs_joined$remainder < 0)
+message(
+  "GRS intensity split: ", n_neg_grs, " of ", nrow(grs_joined),
+  " region/scenario/year rows have AREA/LSP - GRS|EXT - GRS|SVP < 0 ",
+  "(floored at 0 via pmax; GRS|EXT and GRS|SVP are otherwise assumed mutually exclusive)."
+)
+
+# SVP is not exported as its own AREA item -- it's already reported under
+# AREA_agrofor/TOT. It's still subtracted out of GRS|INT's remainder below
+# (not folded back in), so GRS|EXT + GRS|INT does NOT sum to AREA/LSP; the
+# gap is the silvopasture portion, covered by AREA_agrofor instead.
+grs_tidy <- rbindlist(list(
+  grs_joined[, .(Model, Scenario, Region, Item = "GRS|EXT", Variable = "AREA",
+                 Year, Unit, Value = grs_ext)],
+  grs_joined[, .(Model, Scenario, Region, Item = "GRS|INT", Variable = "AREA",
+                 Year, Unit, Value = pmax(0, remainder))]
+))
+
+dt_updated <- rbindlist(list(dt_updated, crp_tidy, grs_tidy), use.names = TRUE, fill = TRUE)
+
+#### region mapping (region_map for Econ, country_region_map for BII)
+source("./codes/region_mapping.R")
 
 #### add BII
 source("./codes/BII_calc.R")
-BII_update <- readRDS("./open_input/processed_BII.rds")
 
-dt_BII_update <- as.data.table(BII_update)
-dt_updated <- rbindlist(list(dt_updated, dt_BII_update), use.names = TRUE, fill = TRUE)
-
-#### add intensive/extensive management area (byproduct of BII_calc.R)
-area_mgmt_update <- readRDS("./open_input/processed_area_mgmt.rds")
-
-dt_area_mgmt_update <- as.data.table(area_mgmt_update)
-dt_updated <- rbindlist(list(dt_updated, dt_area_mgmt_update), use.names = TRUE, fill = TRUE)
+dt_updated <- rbindlist(list(dt_updated, as_report_dt(BII_tidy)), use.names = TRUE, fill = TRUE)
 
 #### add Economic Variables
 source("./codes/Econ_calc.R")
-Econ_update <- readRDS("./open_input/processed_Econ.rds")
 
-dt_Econ_update <- as.data.table(Econ_update)
-dt_updated <- rbindlist(list(dt_updated, dt_Econ_update), use.names = TRUE, fill = TRUE)
+dt_updated <- rbindlist(list(dt_updated, as_report_dt(Econ_tidy)), use.names = TRUE, fill = TRUE)
 
-#### HOTFIXES FOR STAKEHOLDER WORKSHOP
-# Replace specific scenarios
-dt_updated[Scenario == "Base_FPWET", Scenario := "Base_FPPTL"]
-dt_updated[Scenario == "Base_EAWET", Scenario := "Base_EAPTL"]
+# -------------------------
+# Final scenario renaming + filters (all modules)
+# -------------------------
+dt_updated <- apply_scen_rename(dt_updated)
 
 dt_updated[Region == "World", Region := "WLD"]
-dt_updated <- dt_updated[Region != "ROW"]
-dt_updated <- dt_updated[Region != "CHE"]
+dt_updated <- dt_updated[
+  Year %in% years_keep &
+    !(Item %in% exclude_items) &
+    !(Region %in% exclude_regions) &
+    !(Variable %in% exclude_variables)
+]
 
-
-
-fname <- file.path(out_dir, paste0(date.tag, "_", accelerator.name, "_comprehensive.csv"))
-
-if (!is.null(rename.model)) {
-  dt_sub$Model <- rename.model
+if (length(scen.filter) != 0) {
+  dt_updated <- dt_updated[Scenario %in% scen.filter]
 }
+
+dt_updated[, Model := rename.model]
+
+n_dup <- sum(duplicated(dt_updated, by = c("Model", "Scenario", "Region", "Item", "Variable", "Year", "Unit")))
+if (n_dup > 0) warning(n_dup, " duplicated Model/Scenario/Region/Item/Variable/Year/Unit rows in output")
+
+# -------------------------
+# Export
+# -------------------------
+date.tag <- gsub("-", "", Sys.Date())
+fname <- file.path(out_dir, paste0(date.tag, "_", accelerator.name, "_", output.suffix, ".csv"))
+message("Writing ", uniqueN(dt_updated$Scenario), " scenario(s) to ", fname)
 
 data.table::fwrite(dt_updated, fname)
 

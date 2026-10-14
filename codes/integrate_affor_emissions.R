@@ -9,7 +9,7 @@ forest_area[, Affor := Value - first(Value),
 # Optional: Replace the NA in the first year (2000) with 0 if desired
 forest_area[is.na(Affor), Affor := 0]
 
-conv.fac <- readRDS("open_input/affor_emis_factors.rds")
+conv.fac <- readRDS(affor.factors.file)
 # 1. Ensure conv.fac is a data.table and align the Year type
 setDT(conv.fac)
 conv.fac[, Year := as.integer(as.character(year))]

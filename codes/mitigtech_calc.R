@@ -1,6 +1,7 @@
 ######## easy mitigation tech calc post script
 
-# --- 1. Load Required Libraries ---# Note: library() is generally preferred over require() in scripts because # it will throw a clear error immediately if the package is missing.library(dplyr)
+# --- 1. Load Required Libraries ---
+library(dplyr)
 library(tidyr)
 library(data.table)
 
@@ -10,7 +11,7 @@ output_reg_land <- tryCatch(
   error = function(e) stop("Failed to read OUTPUT_AG_REG: ", e$message)
 )
 
-output_reg_land <- output_reg_land$OUTPUT_AG$records
+output_reg_land <- output_reg_land$OUTPUT_AG_REG$records
 setDT(output_reg_land)
 
 new_names <- c("ALLRUN", "VAR_ID", "VAR_UNIT", "ANYREGION", "ITEM_AG",
@@ -22,6 +23,9 @@ if (all(grepl("^uni_", names(output_reg_land)[1:9]))) {
 } else {
   message("Column names already labeled — skipped renaming.")
 }
+
+# Scenario name from the dimensions chosen in scen.dims (settings)
+output_reg_land <- compose_scenario(output_reg_land)
 
 mitigtech_summary = output_reg_land %>%
   filter(ITEM_AG %in% c("Silvopasture","GrsMgmt_SOC","CrpMgmt_SOC","Biochar_apl",

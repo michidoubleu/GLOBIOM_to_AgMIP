@@ -1,6 +1,7 @@
 ######## easy BBI calc post script
 
-# --- 1. Load Required Libraries ---# Note: library() is generally preferred over require() in scripts because # it will throw a clear error immediately if the package is missing.library(dplyr)
+# --- 1. Load Required Libraries ---
+library(dplyr)
 library(tidyr)
 library(data.table)
 
@@ -8,7 +9,7 @@ library(data.table)
 # mappingpredicts_map <- read.csv("../PREDICTS-IIASA/PREDICTS_update_crosswalk.csv", header = TRUE) %>% 
 # mutate(ID = row_number())
 
-predicts_data <- read.csv("./open_input/PREDICTS_update_modified.csv") %>% dplyr::select(LUM, Abundance)
+predicts_data <- read.csv(predicts.file) %>% dplyr::select(LUM, Abundance)
 
 
 
@@ -27,6 +28,8 @@ new_names <- c("ALLRUN", "region_c", "LUID", "shit1","shit2","shit3","shit4","sh
                "mgmt","ALLSCEN1","ALLSCEN2","ALLSCEN3","Year","Value")
 # Apply column names
 setnames(globiom_areas, new_names)
+globiom_areas <- compose_scenario(globiom_areas)
+globiom_areas[, region_c := as.character(region_c)]
 
 # Recode mgmt
 globiom_areas[, mgmt := ifelse(mgmt %in% c("LI", "SS"), "LI", "HI")]
@@ -41,32 +44,12 @@ globiom_agg <- globiom_areas[
 setorder(globiom_agg, region_c, ALLSCEN1, ALLSCEN2, ALLSCEN3, mgmt, Year)
 
 
-region.map <- readGDX(GLOBIOM.file, symbols = "REGION_AG_MAP")
-region.map <- region.map$REGION_AG_MAP$records
-setDT(region.map)
-region.map <- unique(
-  region.map[, .(region = uni_2,
-                 region_61 = uni_3)]
-)
-
-country.map <- readGDX("inputs/a6_LAMASUS_baseline.gdx", symbols = "REGION61_COUNTRY_MAP")
-country.map <- country.map$REGION61_COUNTRY_MAP$records
-setDT(country.map)
-country.map <- unique(
-  country.map[, .(region_61 = ANYREGION,
-                 region_c = ALLCOUNTRY)]
-)
-
-mapping <- merge(
-  region.map,
-  country.map,
-  by = "region_61",
-  allow.cartesian=TRUE
-)
+# country -> region_61 -> region mapping, built in codes/region_mapping.R
+if (!exists("country_region_map")) stop("BII_calc.R needs country_region_map: set country.map.file and source codes/region_mapping.R first")
 
 globiom_mapped <- merge(
   globiom_agg,
-  mapping,
+  country_region_map,
   by = "region_c",
   all.x = TRUE,
   ,
@@ -116,6 +99,7 @@ for (old in names(rename_map)) {
 }
 
 output_land[, ALLRUN := NULL][]
+output_land <- compose_scenario(output_land)
 
 # Convert factor columns to character
 fact_cols <- names(which(sapply(output_land, is.factor)))
@@ -286,34 +270,6 @@ grassland_final <- grassland_updated[, .(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, A
 
 output_land <- output_land[ITEM_AG != "Grassland"]
 output_land <- rbind(output_land, grassland_final)
-
-##### Intensive / Extensive management area (AgMIP template: AREA_intensive, AREA_extensive) #####
-# Cropland_HI/Cropland_LI and Grassland_intensive/Grassland_extensive are already
-# net of the organic and hedgerow deductions above, so they sum cleanly with
-# AREA_org/AREA_lft (processed_mitigtech.rds) without double-counting area.
-area_mgmt <- output_land[
-  ITEM_AG %in% c("Cropland_HI", "Cropland_LI", "Grassland_intensive", "Grassland_extensive")
-][, ITEM_AG := fifelse(ITEM_AG %in% c("Cropland_HI", "Grassland_intensive"),
-                        "AREA_intensive", "AREA_extensive")]
-
-area_mgmt <- area_mgmt[, .(Value = sum(Value, na.rm = TRUE)),
-                        by = .(VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN3, Year)]
-
-area_mgmt_tidy <- area_mgmt[, .(
-  Model    = "GLOBIOM",
-  Scenario = ALLSCEN3,
-  Region   = ANYREGION,
-  Item     = "TOT",
-  Variable = ITEM_AG,
-  Year     = as.integer(Year),
-  Unit     = VAR_UNIT,
-  Value    = Value
-)]
-
-setorder(area_mgmt_tidy, Region, Year)
-area_mgmt_tidy <- as_tibble(area_mgmt_tidy)
-
-saveRDS(area_mgmt_tidy, "./open_input/processed_area_mgmt.rds")
 
 for_mng = dt_updated %>%
   filter(Variable == "AREA", 

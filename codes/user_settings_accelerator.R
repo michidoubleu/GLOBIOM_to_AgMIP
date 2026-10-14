@@ -22,6 +22,9 @@ if (length(args) >= 3) {
 
 # --- Metadata ---
 rename.model     <- "GLOBIOM"
+# Scenario dimensions composing the scenario name, joined with "-"
+# c("SCEN3") -> "BASE"; c("SCEN1", "SCEN2", "SCEN3") -> "SSP2-...-BASE"
+scen.dims        <- c("SCEN1", "SCEN2", "SCEN3")
 accelerator.name <- "GLOBIOM"
 
 # --- Mappings ---
