@@ -49,7 +49,7 @@ OUTPUT_AG_Oth[, `:=`(VAR_ID = fcase(VAR_ID == "ECH4", "ECH4_eq", VAR_ID == "EN2O
 
 # Section C: Emissions
 OUTPUT_AG_Emis <- output_ag[VAR_ID %in% emis_vars, ..common_cols]
-OUTPUT_AG_Emis[, `:=`(VAR_ID = fcase(VAR_ID == "CH4", "ECH4", VAR_ID == "N2O", "EN2O"), VAR_UNIT = unit_map_emis[VAR_UNIT], Value = Value / 1000)]
+OUTPUT_AG_Emis[, `:=`(VAR_ID = fcase(VAR_ID == "CH4", "ECH4", VAR_ID == "N2O", "EN2O"), VAR_UNIT = unit_map_emis[VAR_UNIT], Value = Value * 1000)] # Mt -> kt
 
 # Section D & E: Nutrition & Land
 Output_Ag_Proto <- output_ag[VAR_ID=="NUTR" & VAR_UNIT=="gprot/cap/d", ..common_cols][, `:=`(VAR_ID="PROTO", VAR_UNIT="gprt/cap/day")]

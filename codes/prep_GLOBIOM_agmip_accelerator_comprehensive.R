@@ -143,7 +143,7 @@ OUTPUT_AG_Emis[, VAR_ID := fifelse(
   fifelse(VAR_ID == "N2O", "EN2O", VAR_ID)
 )]
 OUTPUT_AG_Emis[, VAR_UNIT := unit_map_emis[VAR_UNIT]]
-OUTPUT_AG_Emis[, Value := Value / 1000] # Mt -> kt
+OUTPUT_AG_Emis[, Value := Value * 1000] # Mt -> kt
 
 # -------------------------
 # Section D: Protein / Nutrition
