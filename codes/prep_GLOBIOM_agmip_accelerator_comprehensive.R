@@ -62,8 +62,12 @@ output_ag[, (fact_cols) := lapply(.SD, as.character), .SDcols = fact_cols]
 char_cols <- names(which(sapply(output_ag, is.character)))
 output_ag[, (char_cols) := lapply(.SD, str_trim), .SDcols = char_cols]
 
-# Scenario name from the dimensions chosen in scen.dims
+# Scenario name from the dimensions chosen in scen.dims (+ fill of scen.fill)
 output_ag <- compose_scenario(output_ag)
+
+# reported scenario names, used to align the exogenous forest inputs
+report.scens <- unique(output_ag$ALLSCEN3)
+report.scens <- ifelse(report.scens %in% names(scen.rename), scen.rename[report.scens], report.scens)
 
 # Standardize region names
 if ("ANYREGION" %in% names(output_ag)) {
@@ -207,16 +211,23 @@ Output_Ag_FOOD[, VAR_ID := "FOOD"]
 Output_Ag_FOOD <- Output_Ag_FOOD[, .(Value = sum(Value)), by = .(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
 
 # Fertiliser: inorganic + organic 5-letter codes (FRTIN+FRTON, FRTIP+FRTOP)
-# if both exist in the GDX, otherwise the 4-letter total (FRTN, FRTP)
+# where both exist in the GDX, otherwise the 4-letter total (FRTN, FRTP).
+# Decided per item: the split is only reported for some items (e.g. TOT), the
+# crop-level items (AGR, CRP, WHT, ...) only come as FRTN/FRTP.
 process_fert <- function(split_ids, total_id) {
-  if (all(split_ids %in% output_ag$VAR_ID)) {
-    res <- output_ag[VAR_ID %in% split_ids & VAR_UNIT == "1000 t", ..common_cols]
-    res[, VAR_ID := total_id]
-    res[, .(Value = sum(Value)), by = .(VAR_ID, VAR_UNIT, ANYREGION, ITEM_AG, ALLSCEN1, ALLSCEN2, ALLSCEN3, Year)]
-  } else {
-    message(total_id, ": ", paste(split_ids, collapse = "/"), " not found, using ", total_id)
-    output_ag[VAR_ID == total_id & VAR_UNIT == "1000 t", ..common_cols]
-  }
+  fert_by <- c("VAR_ID", "VAR_UNIT", "ANYREGION", "ITEM_AG", "ALLSCEN1", "ALLSCEN2", "ALLSCEN3", "Year")
+  # a missing split component is a zero (GAMS does not write zeros to the GDX)
+  split <- output_ag[VAR_ID %in% split_ids & VAR_UNIT == "1000 t", ..common_cols]
+  split[, VAR_ID := total_id]
+  split <- split[, .(Value = sum(Value)), by = fert_by]
+
+  total <- output_ag[VAR_ID == total_id & VAR_UNIT == "1000 t", ..common_cols]
+  total <- total[!split, on = setdiff(fert_by, "VAR_ID")]
+
+  message(total_id, ": ", paste(split_ids, collapse = "+"), " for item(s) ",
+          paste(sort(unique(split$ITEM_AG)), collapse = ", "), "; ", total_id, " for ",
+          uniqueN(total$ITEM_AG), " other item(s)")
+  rbindlist(list(split, total), use.names = TRUE)
 }
 Output_Ag_FRTN <- process_fert(c("FRTIN", "FRTON"), "FRTN")
 Output_Ag_FRTP <- process_fert(c("FRTIP", "FRTOP"), "FRTP")
@@ -251,20 +262,9 @@ dt_sub <- OUTPUT_AG_t[, .(
 # dt_sub <- dt_sub[!(Item %in% soc_items & Variable %in% c("ECO2", "CTAX"))]
 
 
-##### scenario renaming + fill of missing scenarios (settings: scen.rename, scen.fill)
-# renaming first, so a renamed scenario is not also filled from scen.fill.from
+##### scenario renaming (settings: scen.rename); missing scenarios (scen.fill)
+# are already filled at GDX read time in compose_scenario()
 dt_sub <- apply_scen_rename(dt_sub)
-
-missing.scens <- setdiff(scen.fill, dt_sub$Scenario)
-if (length(missing.scens) > 0) {
-  if (!(scen.fill.from %in% dt_sub$Scenario)) stop("scen.fill.from '", scen.fill.from, "' not found in the data")
-  message("Filling ", length(missing.scens), " missing scenario(s) as copy of ", scen.fill.from, ": ",
-          paste(missing.scens, collapse = ", "))
-  dt_sub <- rbindlist(c(
-    list(dt_sub),
-    lapply(missing.scens, \(s) copy(dt_sub[Scenario == scen.fill.from])[, Scenario := s])
-  ))
-}
 
 
 
@@ -282,7 +282,7 @@ dt_combined <- rbindlist(list(dt_main, dt_forest), use.names = TRUE, fill = TRUE
 
 
 #### add HWP emissions
-for.res.emis <- readRDS(forest.hwp.file)
+for.res.emis <- align_forest_scen(readRDS(forest.hwp.file), "forest.hwp.file")
 dt_forest_2000 <- for.res.emis %>%
   filter(Year == 2010) %>%
   mutate(Year = 2000)
@@ -299,7 +299,7 @@ dt_updated <- dt_combined[, .(Value = sum(Value, na.rm = TRUE)),
 
 
 #### add forest other
-for.res.other <- readRDS(forest.other.file)
+for.res.other <- align_forest_scen(readRDS(forest.other.file), "forest.other.file")
 
 for.res.other <- for.res.other %>% filter(Year <= forest.year.max)
 
