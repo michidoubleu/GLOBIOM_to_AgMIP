@@ -1,4 +1,4 @@
-package.list <- c("data.table", "gamstransfer")
+package.list <- c("tidyverse", "data.table", "gamstransfer")
 
 for (pkg in package.list) {
   if (!require(pkg, character.only = TRUE, quietly = TRUE)) {

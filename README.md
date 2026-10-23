@@ -1,116 +1,116 @@
 # GLOBIOM to AgMIP Post-Processing Routine
 
-This repository hosts the codes to transform GLOBIOM standard output to the AgMIP reporting template.
+This repository transforms a GLOBIOM output GDX into a CSV in the AgMIP reporting format,
+including regional economic indicators (value added and subsidies).
 
-## User Guide
+It is the generic version of the routine: no project-specific scenario handling and no
+additional ex-post integrations (forest, biodiversity, mitigation technologies).
 
-### 1. Configuring the Routine
-All user settings are set in the settings block of the main script and used by the child scripts:
-- **`main_GLOBIOM_to_AgMIP.R`**: For the full pipeline (including Economic, BII, and Mitigation modules). Settings not set there fall back to `settings_defaults.R`.
-- **`user_settings_accelerator.R`**: Internal! Only for settings when launching as **ROUTINE** on the **IIASA-Accelerator**.
+## Quick start
 
-**Key variables you can set:**
-- `GLOBIOM.file`: Path to your input GLOBIOM GDX file (default is in `inputs/`).
-- `out_dir`: The directory where the final standardized CSV files will be saved (default: `./outputs`).
-- `rename.model`: The label for the "Model" column in the output (default: "GLOBIOM").
-- `scen.dims`: Scenario dimensions composing the scenario name, joined with "-" (default: `c("SCEN3")`; e.g. `c("SCEN2", "SCEN3")` gives `SSP2-BASE`).
-- `scen.filter`: A vector of scenario names if you want to process only a subset of scenarios (default: empty = all scenarios in the GDX file).
-- `scen.rename` / `scen.fill` / `scen.fill.from`: Scenario renaming in the reporting and filling of missing scenarios as a copy of another one (LAMASUS).
-- `years_keep`, `exclude_items`, `exclude_regions`, `exclude_variables`: Filters applied to the full output of all modules. Soil carbon items (`soc_items`) are excluded as they are not yet in the AgMIP template.
-- Exogenous module inputs: `costs.file`, `country.map.file`, `predicts.file`, `affor.factors.file`, `forest.hwp.file`, `forest.other.file`, `forest.year.max`.
+### 1. Requirements
+- R (>= 4.1) with `Rscript` available on the command line
+- R packages `tidyverse`, `data.table` and `gamstransfer` (all on CRAN). Install them once from
+  the repository root with:
+  ```bash
+  Rscript init.R
+  ```
 
-*Note: You can also override the input file and output directory via command line arguments when running the scripts.*
+### 2. Put your GLOBIOM output GDX into `inputs/`
+Create a folder called `inputs` in the repository root (next to `codes/` and `open_input/`) and
+copy your GLOBIOM output GDX into it:
 
-### 2. Manual Data Updates
-To ensure the reporting is accurate, especially for the modular indicators, several exogenous data files in the `open_input/` directory may require manual updates:
-- **Economic Costs**: Update `open_input/LAMASUS_costs_country_*.csv` with the latest regional cost estimates based on LAMASUS costing data.
-- **Organic & Hedgerow Targets**: Update `open_input/CAP_SP_organic_plans.csv` and `open_input/CLU_hedgerow_area_*.csv` if scenario assumptions for mitigation technologies change.
-- **Emissions & Forest Factors**: Update `open_input/affor_emis_factors.rds` or `open_input/processed_forest_*.rds` when updated afforestation or harvested wood products (HWP) data becomes available (through Forest-GLOBIOM or Forest Navigator runs).
-
-### 3. How to Run
-To generate the AgMIP reporting file, execute the main script from the root of the repository using R or the terminal:
-```bash
-Rscript codes/main_GLOBIOM_to_AgMIP.R [path/to/input.gdx] [path/to/output_dir]
 ```
-If no arguments are provided, the script will use the defaults specified in your user settings file.
+GLOBIOM_to_AgMIP/
+├── codes/
+├── open_input/
+├── inputs/
+│   └── my_GLOBIOM_run.gdx      <-- your GLOBIOM output
+└── outputs/                     <-- created automatically, the CSV is written here
+```
 
-## Overview
-This routine transforms raw GLOBIOM outputs into standardized CSV files compatible with the AgMIP Accelerator template. The routine is modular, incorporating several sub-modules to calculate specific indicators such as biodiversity (BII), economic costs and revenues, and the effects of mitigation technologies.
+The GDX must contain the GLOBIOM reporting symbols `OUTPUT_AG`, `OUTPUT` and `REGION_AG_MAP`
+(standard GLOBIOM output / merged scenario GDX).
 
-## Main Entry Points
-The pipeline is typically initialized via the main execution scripts:
-- `main_GLOBIOM_to_AgMIP.R`: The comprehensive entry point that executes the full suite of modules (BII, Economics, Mitigation, Afforestation) by calling `prep_GLOBIOM_agmip_accelerator_comprehensive.R`.
-- `main_GLOBIOM_to_AgMIP_accelerator.R`: A streamlined entry point launching as **ROUTINE** on the **IIASA-Accelerator**.
+`inputs/` and `outputs/` are excluded from git (`.gitignore`), so your data is never committed.
 
-User configurations, such as filtering years, scenarios, and setting the root directory, are handled in the main script (`main_GLOBIOM_to_AgMIP.R`) and `user_settings_accelerator.R` respectively. The region mapping used by the Econ and BII modules is built in `region_mapping.R`.
+### 3. Run it from the command line
+Open a terminal **in the repository root** and call the main script with two arguments,
+the input GDX and the output CSV:
 
----
+```bash
+Rscript codes/main_GLOBIOM_to_AgMIP.R inputs/my_GLOBIOM_run.gdx outputs/my_GLOBIOM_run_AgMIP.csv
+```
 
-## Processing Engine and Sub-Scripts
+On Windows, if `Rscript` is not on your PATH, use the full path, e.g.:
 
-The core processing is handled by the "prep" scripts, which dynamically read data from GDX files, clean and standardize columns, and merge specialized metrics calculated in the sub-scripts.
+```bat
+"C:\Program Files\R\R-4.5.3\bin\Rscript.exe" codes/main_GLOBIOM_to_AgMIP.R inputs/my_GLOBIOM_run.gdx outputs/my_GLOBIOM_run_AgMIP.csv
+```
 
-### 1. Engine (`prep_GLOBIOM_agmip_accelerator_comprehensive.R`)
-This script acts as the backbone of the comprehensive routine. It performs the initial extraction of core agricultural data (production, land use, emissions, nutrition) and sequentially integrates the outputs from the following sub-modules.
+Without arguments the defaults set at the top of `codes/main_GLOBIOM_to_AgMIP.R` are used:
 
-### 2. Sub-Modules
-* **`integrate_affor_emissions.R`**: Calculates carbon sinks derived from afforestation by tracking the increase in forest area relative to the year 2000 and applying specific conversion factors.
-* **`mitigtech_calc.R`**: Calculates the area allocated to different mitigation technologies (e.g., silvopasture, biochar, organic farming, and hedgerows) under various scenarios.
-* **`BII_calc.R`**: Calculates the Biodiversity Intactness Index (BII) by mapping GLOBIOM land use allocations (including management intensity and mitigation tech) to PREDICTS land use classes and their associated abundance weightings.
-* **`Econ_calc.R`**: Calculates regional economic indicators, including crop revenues, crop costs, feed costs, grassland costs, subsidies, and total agricultural income.
+| Setting        | Argument | Default                        |
+|----------------|----------|--------------------------------|
+| `GLOBIOM.file` | 1st      | `inputs/GLOBIOM_output.gdx`    |
+| `output.file`  | 2nd      | `outputs/GLOBIOM_AgMIP.csv`    |
 
----
+These two are the only user settings. A run of a full merged scenario GDX takes about half a
+minute and ends with `Writing <n> scenario(s), <n> rows to <output.file>` and `Done.`
 
-## Input Data Inventory
+## Output
 
-The routine relies on several input datasets. Below is a comprehensive list of these inputs, their function within the routine, and space to annotate their origin.
+One CSV with the columns
 
-### Primary GLOBIOM Outputs
-**File:** `GLOBIOM.file` (Dynamic argument, e.g., `inputs/acc_pointer.gdx`)
-* **Loaded In:** Engine, `BII_calc.R`, `Econ_calc.R`, `mitigtech_calc.R`
-* **Purpose:** The primary output database from the GLOBIOM model runs. It provides the core data variables including `OUTPUT_AG` (general agricultural outputs), `OUTPUT` (prices, production, subsidies), `ACR_COMPARE` (cropland management types), and `OUTPUT_AG_REG` (mitigation technologies).
-* **Origin:** *[User Input Required: Please specify the generation process or source of this GDX file]*
+| Column     | Content                                                                       |
+|------------|-------------------------------------------------------------------------------|
+| `Model`    | `GLOBIOM`                                                                     |
+| `Scenario` | the three scenario dimensions of the GDX joined with `-`, e.g. `SSP2-SCEN-CP` |
+| `Region`   | GLOBIOM reporting region (`World` is reported as `WLD`)                       |
+| `Item`     | AgMIP item code                                                               |
+| `Variable` | AgMIP variable code                                                           |
+| `Year`     | 2000, 2010, ..., 2100 (as available in the GDX)                               |
+| `Unit`     | AgMIP unit                                                                    |
+| `Value`    | value                                                                         |
 
-**File:** `inputs/a6_LAMASUS_baseline.gdx` (setting `country.map.file`)
-* **Loaded In:** `region_mapping.R` (used by `BII_calc.R`)
-* **Purpose:** Provides the spatial mapping crosswalk (`REGION61_COUNTRY_MAP`) to link the 61 GLOBIOM regions to country-level data.
-* **Origin:** *[User Input Required: Please specify the source]*
+### Fixed reporting conventions (`codes/prep_GLOBIOM_to_AgMIP.R`)
+- Years: 10-year steps from 2000 to 2100.
+- Regions `ROW` and `CHE` are not reported.
+- Aggregate/helper items (`Meat`, `ALL`, `CER`, `LUC*`, `PEAT`, ...) are not reported.
+- Soil organic carbon items (`SOC`, `SOCE`, `SOCC`, `SOCG`, `SOCB`) are not reported as they are
+  not yet in the AgMIP template; the code to report them is kept as a comment.
+- Fertiliser `FRTN`/`FRTP`: sum of inorganic + organic (`FRTIN`+`FRTON`, `FRTIP`+`FRTOP`) for the
+  items where the split exists in the GDX, otherwise the 4-letter total.
+- `*_dm` variables are the dry-matter versions; CH4/N2O are converted from Mt to kt.
 
-### Forestry and Emissions Data
-**File:** `open_input/processed_forest.rds`
-* **Loaded In:** Engine
-* **Purpose:** Contains processed baseline data for various forest management categories to be appended to the final outputs.
-* **Origin:** *[User Input Required: Please specify the source]*
+## Code structure
 
-**File:** `open_input/processed_forest_HWP_emis.rds`
-* **Loaded In:** Engine
-* **Purpose:** Contains pre-calculated emissions data associated with Harvested Wood Products (HWP).
-* **Origin:** *[User Input Required: Please specify the source]*
+| File                          | Purpose                                                                       |
+|-------------------------------|-------------------------------------------------------------------------------|
+| `codes/main_GLOBIOM_to_AgMIP.R` | Entry point: the two user settings, then runs the engine                    |
+| `codes/prep_GLOBIOM_to_AgMIP.R` | Engine: reads `OUTPUT_AG`, maps it to the AgMIP format, adds the economic indicators, filters and writes the CSV |
+| `codes/region_mapping.R`      | GLOBIOM 61 regions -> reporting regions, from `REGION_AG_MAP` in the GDX       |
+| `codes/Econ_calc.R`           | Economic indicators from `OUTPUT` and the exogenous cost data                 |
+| `codes/CAP_BUDG_pillar_mapping.md` | Mapping of the CAP payment codes to Pillar 1 / Pillar 2                  |
+| `init.R`                      | Installs the required R packages                                              |
 
-**File:** `open_input/affor_emis_factors.rds`
-* **Loaded In:** `integrate_affor_emissions.R`
-* **Purpose:** Provides the conversion factors (`sink.fac`) required to translate new afforested area (in hectares) into carbon sequestration values (MtCO2e).
-* **Origin:** *[User Input Required: Please specify the source]*
+## Economic indicators (`codes/Econ_calc.R`)
 
-### Biodiversity Data
-**File:** `./open_input/PREDICTS_update_modified.csv`
-* **Loaded In:** `BII_calc.R`
-* **Purpose:** Contains the PREDICTS database coefficients mapping Land Use Management (LUM) categories to biodiversity abundance indices. Used to compute the area-weighted Biodiversity Intactness Index.
-* **Origin:** *[User Input Required: Please specify the source]*
+Reported per reporting region in `bn USD 2005 MER`:
 
-### Economic Data
-**File:** `open_input/LAMASUS_costs_country_20260420.csv`
-* **Loaded In:** `Econ_calc.R`
-* **Purpose:** Provides country-specific exogenous cost estimates for crop production and grassland management. Used in conjunction with GLOBIOM production and area outputs to calculate total sector costs and net incomes.
-* **Origin:** *[User Input Required: Please specify the source]*
+| Variable    | Items         | Content                                                                 |
+|-------------|---------------|-------------------------------------------------------------------------|
+| `VAAD`      | CRP, LSP, TOT | value added: revenue - costs + subsidies                                |
+| `BUDG`      | CRP, LSP, TOT | subsidies (GLOBIOM `BUDG`)                                              |
+| `BUDG_1stP` | TOT           | CAP Pillar 1 payments (direct payments)                                 |
+| `BUDG_2ndP` | TOT           | CAP Pillar 2 payments (rural development)                               |
 
-### Mitigation Scenarios Data
-**File:** `./open_input/CAP_SP_organic_plans.csv`
-* **Loaded In:** `mitigtech_calc.R`
-* **Purpose:** Contains the targeted shares for organic farming expansion under different CAP (Common Agricultural Policy) scenarios.
-* **Origin:** *[User Input Required: Please specify the source]*
-
-**File:** `./open_input/CLU_hedgerow_area_FPEA_20260427.csv`
-* **Loaded In:** `mitigtech_calc.R`
-* **Purpose:** Contains exogenous targets for hedgerow area expansion under various scenarios.
-* **Origin:** *[User Input Required: Please specify the source]*
+- Crops: revenue = price (`XPRP`, USD/t) x production (`Prod`, 1000 t); cost = cost per ha x area.
+- Livestock: revenue = price x production of the livestock products; cost = feed (`Feed`, 1000 t,
+  valued at crop prices) + grassland area x grassland cost per ha.
+- Costs per ha come from `open_input/LAMASUS_costs_country_20260420.csv` (country level, read as
+  1000 EUR/ha and treated as USD). As this file covers EU countries only, the economic indicators
+  are only reported for regions built from those countries.
+- Money values are in million until the final conversion to billion. Note that GLOBIOM prices and
+  subsidies are in USD 2000 and the costs in EUR; no deflator or exchange rate is applied, the
+  unit label follows the AgMIP template.

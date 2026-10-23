@@ -367,6 +367,4 @@ setorder(Econ_tidy, Region, Year)
 # Convert to tibble if you want
 Econ_tidy <- as_tibble(Econ_tidy)
 
-saveRDS(Econ_tidy, "./open_input/processed_Econ.rds")
-
 

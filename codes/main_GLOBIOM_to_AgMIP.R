@@ -2,88 +2,33 @@
 
 ## Author: Michael Wögerer, (IIASA)
 
-## Aim: Provides a routine for seamless connection of GLOBIOM and
-## the Accelerator: https://accelerator.iiasa.ac.at/
+## Aim: Transforms a GLOBIOM output GDX into a CSV in the AgMIP reporting
+## format (Model, Scenario, Region, Item, Variable, Year, Unit, Value),
+## including the economic indicators (VAAD, BUDG).
 
-## Notes: All user settings are set below and used by the child scripts.
-## Settings not set here fall back to codes/settings_defaults.R
+## If you find bugs, feel free to fix them and send a pull request or email
+## me via wogerer@iiasa.ac.at
 
-## V1 of this script, if you find bugs, feel free to fix them and send
-## a pull request or email me via wogerer@iiasa.ac.at
-
-
-### from main directory call:
-### Rscript codes/main_GLOBIOM_to_AgMIP.R path/to/my_file.gdx path/to/output_dir [SCEN1 SCEN2 ...]
-
-
+### from the repository root call:
+### Rscript codes/main_GLOBIOM_to_AgMIP.R inputs/my_file.gdx outputs/my_file.csv
 
 rm(list=ls())
 
-###### USER SETTINGS
+###### USER SETTINGS -- can also be given on the command line (ARG1, ARG2)
 ##############################################################################################################################
 
-# --- CLI arguments: ARG1 = GDX file, ARG2 = output dir, ARG3+ = scenario filter ---
 args <- commandArgs(trailingOnly = TRUE)
 
-GLOBIOM.file <- ifelse(length(args) >= 1, args[1], "inputs/merged_LAMA.gdx")
-out_dir      <- ifelse(length(args) >= 2, args[2], "./outputs")
-if (length(args) >= 3) {
-  scen.filter <- args[3:length(args)]
-} else {
-  scen.filter <- c() # empty = all scenarios, e.g. c("BASE", "FP")
-}
+# GLOBIOM output GDX (with OUTPUT_AG, OUTPUT and REGION_AG_MAP)
+GLOBIOM.file <- if (length(args) >= 1) args[1] else "inputs/GLOBIOM_output.gdx"
 
-# --- Labels ---
-rename.model     <- "GLOBIOM"        # "Model" column of the output
-accelerator.name <- "GLOBIOM"        # file name tag
-output.suffix    <- "comprehensive"  # <date>_<accelerator.name>_<output.suffix>.csv
-
-# Scenario dimensions composing the scenario name, joined with "-"
-# c("SCEN3") -> "BASE" (LAMASUS); c("SCEN2", "SCEN3") -> "SSP2-BASE"
-scen.dims <- c("SCEN3")
-
-# --- Scenario handling (LAMASUS) ---
-# Renamed in the reporting only (small GLOBIOM naming errors, not worth a rerun)
-scen.rename <- c("Base_FPWET" = "Base_FPPTL",
-                 "Base_EAWET" = "Base_EAPTL")
-# Scenarios missing from OUTPUT_AG are filled as a copy of scen.fill.from
-scen.fill.from <- "BASE"
-scen.fill <- c("BASE", "FP", "EA", "CP",
-               "Base_FPFRS", "Base_EAFRS", "Base_CPFRS",
-               "Base_FPSOC", "Base_EASOC", "Base_CPSOC",
-               "Base_FPPTL", "Base_EAPTL", "Base_CPPTL",
-               "Base_FPCAP", "Base_EACAP",
-               "Base_FPPST", "Base_EAPST", "Base_CPPST",
-               "Base_FPFRT", "Base_EAFRT", "Base_CPFRT",
-               "Base_FPSWF", "Base_EASWF", "Base_CPSWF",
-               "Base_FPORG", "Base_EAORG", "Base_CPORG",
-               "Base_FPWDM", "Base_EAWDM", "Base_CPWDM",
-               "Base_FPBSR", "Base_EABSR", "Base_CPBSR")
-
-# --- Filters (applied to the full output, all modules) ---
-years_keep <- seq(2000L, 2100L, by = 10L)
-soc_items  <- c("SOC", "SOCE", "SOCC", "SOCG", "SOCB")
-exclude_items <- c(
-  "Meat", "ALL", "CER", "SRP", "PULP", "MEAL", "BIOM", "LUC", "LUCF", "LUCC", "LUCR", "LUCR2",
-  "LUCG", "LUCE", "LUCS", "PEAT", "IP_Biomass", "EW_Biomass",
-  soc_items # soil carbon flux, not yet in the AgMIP template
-)
-exclude_regions   <- c("ROW", "CHE")
-exclude_variables <- c()
-
-# --- Exogenous module inputs ---
-costs.file         <- "open_input/LAMASUS_costs_country_20260420.csv"
-country.map.file   <- "inputs/a6_LAMASUS_baseline.gdx"
-predicts.file      <- "open_input/PREDICTS_update_modified.csv"
-affor.factors.file <- "open_input/affor_emis_factors.rds"
-forest.hwp.file    <- "open_input/processed_forest_HWP_emis.rds"
-forest.other.file  <- "open_input/processed_forest.rds"
-forest.year.max    <- 2050L
+# Output CSV
+output.file  <- if (length(args) >= 2) args[2] else "outputs/GLOBIOM_AgMIP.csv"
 
 ##############################################################################################################################
 ##### DONE WITH SETTINGS
 
-dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 if (!file.exists(GLOBIOM.file)) stop("GDX file not found: ", GLOBIOM.file)
+dir.create(dirname(output.file), showWarnings = FALSE, recursive = TRUE)
 
-source("codes/prep_GLOBIOM_agmip_accelerator_comprehensive.R")
+source("codes/prep_GLOBIOM_to_AgMIP.R")
